@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="一个离线可用、数据保存在浏览器本地的个人生活仪表盘。">
+  <title>Personal Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">YOUR DAY, AT A GLANCE</p>
+        <h1>Personal Dashboard</h1>
+        <p id="quote" class="quote"></p>
+      </div>
+      <div class="date-time" aria-live="polite">
+        <p id="todayDate"></p>
+        <strong id="clock">00:00:00</strong>
+      </div>
+    </header>
+
+    <section class="sync-panel" aria-labelledby="syncTitle">
+      <div class="sync-heading">
+        <div><span class="section-kicker">CLOUD SYNC</span><h2 id="syncTitle">账号与同步</h2></div>
+        <div class="sync-state"><span id="syncDot" class="sync-dot"></span><span id="syncStatus">本地模式</span></div>
+      </div>
+      <p id="syncConfigHint" class="sync-hint hidden">云端尚未配置。请先填写 cloud-config.js 并执行数据库脚本。</p>
+      <div id="syncSignedOut" class="sync-auth-form">
+        <input id="syncEmail" type="email" autocomplete="email" placeholder="邮箱" aria-label="同步账号邮箱">
+        <input id="syncPassword" type="password" minlength="6" autocomplete="current-password" placeholder="密码（至少 6 位）" aria-label="同步账号密码">
+        <button id="syncLogin" class="button primary" type="button">登录</button>
+        <button id="syncSignup" class="button ghost" type="button">注册</button>
+      </div>
+      <div id="syncSignedIn" class="sync-account hidden">
+        <span id="syncUserEmail"></span>
+        <div class="sync-actions"><button id="syncNow" class="button secondary" type="button">立即同步</button><button id="syncLogout" class="button ghost" type="button">退出登录</button></div>
+      </div>
+      <div id="syncConflict" class="sync-conflict hidden">
+        <span>本机和云端都有数据，请选择保留哪一份。</span>
+        <button id="syncUseCloud" class="button secondary" type="button">使用云端数据</button>
+        <button id="syncUseLocal" class="button ghost" type="button">上传本机数据</button>
+      </div>
+      <p id="syncError" class="sync-error hidden" role="alert"></p>
+    </section>
+
+    <section class="top-strip" aria-label="天气与数据工具">
+      <section class="weather-section" aria-labelledby="weatherTitle">
+        <div class="weather-section-header">
+          <div><span class="section-kicker">LIVE WEATHER</span><h2 id="weatherTitle">天气</h2></div>
+          <p class="muted">自动获取当前城市天气，每 30 分钟刷新一次。</p>
+        </div>
+        <div class="weather-controls">
+          <input id="weather-city-input" type="text" maxlength="80" placeholder="输入城市，例如 Hangzhou / Shanghai / Beijing" aria-label="天气城市">
+          <button id="save-weather-city-btn" class="button primary" type="button">保存城市</button>
+          <button id="refresh-weather-btn" class="button ghost" type="button">刷新天气</button>
+        </div>
+        <div id="weather-loading" class="weather-loading hidden" role="status">天气更新中...</div>
+        <div id="weather-error" class="weather-error hidden" role="alert"></div>
+        <div id="weather-card" class="weather-card empty">
+          <p>请先设置城市，天气才会自动更新。</p>
+        </div>
+      </section>
+
+      <aside class="backup-card" aria-labelledby="backupTitle">
+        <div><span class="section-kicker">YOUR DATA</span><h2 id="backupTitle">备份与恢复</h2></div>
+        <p>导出一份本地数据副本，换浏览器也不必重新做人。</p>
+        <div class="backup-actions">
+          <button id="exportData" class="button secondary" type="button">Export Data</button>
+          <button id="importData" class="button ghost" type="button">Import Data</button>
+          <input id="importFile" class="sr-only" type="file" accept="application/json,.json">
+        </div>
+      </aside>
+    </section>
+
+    <main class="dashboard-grid">
+      <section class="card card-wide" aria-labelledby="todoTitle">
+        <div class="card-heading">
+          <div><span class="section-kicker">TODAY</span><h2 id="todoTitle">今日待办</h2></div>
+          <button id="clearCompleted" class="button ghost small" type="button">清空已完成</button>
+        </div>
+        <form id="todoForm" class="inline-form">
+          <label class="sr-only" for="todoInput">待办事项</label>
+          <input id="todoInput" maxlength="120" placeholder="接下来要做什么？" autocomplete="off" required>
+          <button class="button primary" type="submit">添加</button>
+        </form>
+        <ul id="todoList" class="item-list"></ul>
+      </section>
+
+      <section class="card" aria-labelledby="habitTitle">
+        <div class="card-heading">
+          <div><span class="section-kicker">ROUTINE</span><h2 id="habitTitle">习惯追踪</h2></div>
+          <span id="habitDateLabel" class="muted-label"></span>
+        </div>
+        <form id="habitForm" class="inline-form compact">
+          <label class="sr-only" for="habitInput">新习惯</label>
+          <input id="habitInput" maxlength="30" placeholder="添加一个习惯" autocomplete="off" required>
+          <button class="button primary" type="submit">添加</button>
+        </form>
+        <div id="habitList" class="habit-list"></div>
+      </section>
+
+      <section class="card" aria-labelledby="dateTitle">
+        <div class="card-heading">
+          <div><span class="section-kicker">COUNTDOWN</span><h2 id="dateTitle">重要日期</h2></div>
+        </div>
+        <form id="countdownForm" class="stack-form">
+          <input id="eventName" maxlength="60" placeholder="事件名称" aria-label="事件名称" required>
+          <input id="eventDate" type="date" aria-label="事件日期" required>
+          <input id="eventNote" maxlength="100" placeholder="备注（可选）" aria-label="事件备注">
+          <button class="button primary" type="submit">添加日期</button>
+        </form>
+        <div id="countdownList" class="stack-list"></div>
+      </section>
+
+      <section class="card card-wide" aria-labelledby="linksTitle">
+        <div class="card-heading">
+          <div><span class="section-kicker">SHORTCUTS</span><h2 id="linksTitle">快捷链接</h2></div>
+        </div>
+        <form id="linkForm" class="inline-form link-form">
+          <input id="linkName" maxlength="40" placeholder="名称" aria-label="链接名称" required>
+          <input id="linkUrl" maxlength="500" placeholder="URL，例如 notion.so" aria-label="链接地址" required>
+          <button class="button primary" type="submit">添加</button>
+        </form>
+        <div id="linkList" class="link-grid"></div>
+      </section>
+
+      <section class="card card-full" aria-labelledby="projectTitle">
+        <div class="card-heading">
+          <div><span class="section-kicker">MOMENTUM</span><h2 id="projectTitle">项目进度</h2></div>
+          <button id="toggleProjectForm" class="button secondary" type="button">＋ 新建项目</button>
+        </div>
+        <form id="projectForm" class="project-form is-hidden">
+          <input id="projectName" maxlength="60" placeholder="项目名称" aria-label="项目名称" required>
+          <input id="projectStage" maxlength="40" placeholder="当前阶段" aria-label="当前阶段" required>
+          <label class="field-label">截止日期<input id="projectDeadline" type="date" required></label>
+          <label class="field-label">进度 <output id="progressOutput">50%</output><input id="projectProgress" type="range" min="0" max="100" value="50"></label>
+          <textarea id="projectNote" maxlength="300" rows="3" placeholder="备注（可选）" aria-label="项目备注"></textarea>
+          <div class="form-actions">
+            <button id="cancelProject" class="button ghost" type="button">取消</button>
+            <button id="saveProject" class="button primary" type="submit">保存项目</button>
+          </div>
+        </form>
+        <div id="projectList" class="project-grid"></div>
+      </section>
+
+      <section class="card card-wide" aria-labelledby="noteTitle">
+        <div class="card-heading note-heading">
+          <div><span class="section-kicker">JOURNAL</span><h2 id="noteTitle">每日记录</h2></div>
+          <label class="date-picker-label">查看日期<input id="noteDate" type="date"></label>
+        </div>
+        <textarea id="dailyNote" class="note-area" rows="9" maxlength="5000" placeholder="今天发生了什么？记下一点想法……"></textarea>
+        <p id="saveStatus" class="save-status" aria-live="polite">更改将自动保存</p>
+      </section>
+
+      <section class="card summary-card" aria-labelledby="summaryTitle">
+        <div class="card-heading">
+          <div><span class="section-kicker">DAILY RECAP</span><h2 id="summaryTitle">今日总结</h2></div>
+        </div>
+        <div id="summaryStats" class="summary-stats"></div>
+        <p id="summaryComment" class="summary-comment"></p>
+      </section>
+
+      <section class="card card-full monthly-card" aria-labelledby="monthlyTitle">
+        <div class="card-heading">
+          <div><span class="section-kicker">MONTHLY REVIEW</span><h2 id="monthlyTitle">月度回顾</h2></div>
+          <span id="monthlyLabel" class="muted-label"></span>
+        </div>
+        <div id="monthlyOverview" class="monthly-overview"></div>
+        <div id="monthlyHabits" class="monthly-habits"></div>
+        <p id="monthlyComment" class="summary-comment"></p>
+      </section>
+    </main>
+  </div>
+
+  <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <script src="app.js"></script>
+  <script src="cloud-config.js"></script>
+  <script src="cloud-sync.js"></script>
+</body>
+</html>
