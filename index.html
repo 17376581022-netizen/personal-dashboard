@@ -62,7 +62,7 @@
       <p id="syncError" class="sync-error hidden" role="alert"></p>
     </section>
 
-    <section class="top-strip" aria-label="天气与数据工具">
+    <section class="top-strip" aria-label="天气与音乐">
       <section class="weather-section" aria-labelledby="weatherTitle">
         <div class="weather-section-header">
           <div><span class="section-kicker">LIVE WEATHER</span><h2 id="weatherTitle">天气</h2></div>
@@ -111,15 +111,6 @@
         <p class="music-notice">搜索结果提供页面内试听片段，不会跳转外部平台。</p>
       </section>
 
-      <aside class="backup-card" aria-labelledby="backupTitle">
-        <div><span class="section-kicker">YOUR DATA</span><h2 id="backupTitle">备份与恢复</h2></div>
-        <p>导出一份本地数据副本，换浏览器也不必重新做人。</p>
-        <div class="backup-actions">
-          <button id="exportData" class="button secondary" type="button">Export Data</button>
-          <button id="importData" class="button ghost" type="button">Import Data</button>
-          <input id="importFile" class="sr-only" type="file" accept="application/json,.json">
-        </div>
-      </aside>
     </section>
 
     <main class="dashboard-grid">
@@ -174,7 +165,7 @@
         <div id="linkList" class="link-grid"></div>
       </section>
 
-      <section class="card card-full" aria-labelledby="projectTitle">
+      <section class="card project-section" aria-labelledby="projectTitle">
         <div class="card-heading">
           <div><span class="section-kicker">MOMENTUM</span><h2 id="projectTitle">项目进度</h2></div>
           <button id="toggleProjectForm" class="button secondary" type="button">＋ 新建项目</button>
@@ -192,6 +183,16 @@
         </form>
         <div id="projectList" class="project-grid"></div>
       </section>
+
+      <aside class="card backup-card project-backup" aria-labelledby="backupTitle">
+        <div><span class="section-kicker">YOUR DATA</span><h2 id="backupTitle">备份与恢复</h2></div>
+        <p>导出一份本地数据副本，换浏览器也不必重新做人。</p>
+        <div class="backup-actions">
+          <button id="exportData" class="button secondary" type="button">Export Data</button>
+          <button id="importData" class="button ghost" type="button">Import Data</button>
+          <input id="importFile" class="sr-only" type="file" accept="application/json,.json">
+        </div>
+      </aside>
 
       <section class="card card-wide" aria-labelledby="noteTitle">
         <div class="card-heading note-heading">
