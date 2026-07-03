@@ -84,8 +84,8 @@ h2 { margin: 2px 0 0; font-size: 1.23rem; letter-spacing: -.02em; }
 .sync-hint { color: var(--warning); background: rgba(242,201,109,.07); border: 1px solid rgba(242,201,109,.2); }
 .sync-error { color: #ffb4b4; background: rgba(255,133,133,.08); border: 1px solid rgba(255,133,133,.25); }
 
-.top-strip { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, .7fr); gap: 18px; margin-bottom: 18px; }
-.weather-section, .backup-card {
+.top-strip { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(340px, .9fr) minmax(220px, .52fr); align-items: stretch; gap: 18px; margin-bottom: 18px; }
+.weather-section, .music-section, .backup-card {
   min-width: 0;
   padding: 20px 24px;
   background: linear-gradient(135deg, rgba(24, 48, 58, .96), rgba(17, 27, 35, .96));
@@ -119,6 +119,30 @@ h2 { margin: 2px 0 0; font-size: 1.23rem; letter-spacing: -.02em; }
 .backup-card { display: flex; flex-direction: column; justify-content: space-between; }
 .backup-card p { margin: 9px 0 16px; color: var(--muted); font-size: .86rem; }
 .backup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.music-section { background: linear-gradient(145deg, rgba(38, 28, 48, .96), rgba(17, 24, 33, .96)); border-color: #473752; }
+.music-section-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
+.music-source { color: var(--muted); font-size: .75rem; white-space: nowrap; }
+.music-search-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.music-status { min-height: 20px; margin: 9px 1px; color: var(--muted); font-size: .78rem; }
+.music-status.error { color: #ffb4b4; }
+.music-now-playing { display: flex; align-items: center; gap: 11px; min-height: 61px; padding: 10px 11px; background: #0e151d; border: 1px solid var(--border); border-radius: 12px; }
+.music-now-playing.empty { color: var(--muted); border-style: dashed; }
+.music-now-playing > div:last-child { min-width: 0; }
+.music-now-playing strong, .music-now-playing span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-now-playing span { color: var(--muted); font-size: .75rem; }
+.music-disc { display: grid; place-items: center; flex: 0 0 auto; width: 39px; height: 39px; color: #fff; background: radial-gradient(circle, #17131d 0 18%, #b65285 20% 52%, #2b2032 54%); border-radius: 50%; font-weight: 800; }
+.music-now-playing.playing .music-disc { animation: music-spin 4s linear infinite; }
+.music-audio { width: 100%; height: 36px; margin: 9px 0 7px; accent-color: var(--accent); }
+.music-results { display: grid; gap: 6px; max-height: 183px; overflow: auto; scrollbar-width: thin; }
+.music-result { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%; padding: 8px; color: var(--text); background: rgba(255,255,255,.025); border: 1px solid transparent; border-radius: 10px; text-align: left; }
+.music-result:hover, .music-result.active { background: rgba(102,214,167,.07); border-color: rgba(102,214,167,.28); }
+.music-result-mark { display: grid; place-items: center; width: 32px; height: 32px; color: #f5d9e8; background: #4e3144; border-radius: 9px; }
+.music-result-copy { min-width: 0; }
+.music-result-copy strong, .music-result-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-result-copy strong { font-size: .82rem; }
+.music-result-copy span, .music-result-duration { color: var(--muted); font-size: .7rem; }
+.music-notice { margin: 8px 1px 0; color: var(--muted); font-size: .68rem; }
+@keyframes music-spin { to { transform: rotate(360deg); } }
 
 .dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .card {
@@ -205,20 +229,6 @@ input[type="range"] { height: auto; padding: 0; accent-color: var(--accent); bor
 .link-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-item .icon-button { position: absolute; top: 11px; right: 5px; }
 
-.music-card { background: linear-gradient(145deg, rgba(38, 28, 48, .94), rgba(17, 24, 33, .96)); }
-.music-intro { margin: -10px 0 16px; color: var(--muted); font-size: .84rem; }
-.music-platforms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-.music-platform { display: flex; align-items: center; gap: 11px; min-width: 0; padding: 11px 12px; color: var(--text); background: #0e151d; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; transition: transform .15s, border-color .15s; }
-.music-platform:hover { transform: translateY(-2px); border-color: var(--accent); }
-.music-platform > span:last-child { min-width: 0; }
-.music-platform strong, .music-platform small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.music-platform small { margin-top: 2px; color: var(--muted); font-size: .72rem; }
-.music-logo { display: grid; place-items: center; flex: 0 0 auto; width: 34px; height: 34px; color: #fff; background: #d43b3b; border-radius: 10px; font-weight: 800; }
-.qqmusic .music-logo { color: #102218; background: #64d68d; }
-.kugou .music-logo { background: #45a7ff; }
-.kuwo .music-logo { color: #241b00; background: #f3cb48; }
-.migu .music-logo { background: #e9679a; }
-
 .project-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: -4px 0 20px; padding: 18px; background: rgba(7, 12, 17, .35); border: 1px solid var(--border); border-radius: 14px; }
 .field-label { color: var(--muted); font-size: .78rem; }
 .field-label input { margin-top: 4px; }
@@ -275,6 +285,12 @@ input[type="range"] { height: auto; padding: 0; accent-color: var(--accent); bor
   .card-wide { grid-column: span 1; }
 }
 
+@media (max-width: 1180px) and (min-width: 901px) {
+  .top-strip { grid-template-columns: minmax(0, 1fr) minmax(340px, .85fr); }
+  .backup-card { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 18px; }
+  .backup-card p { margin: 0; }
+}
+
 @media (max-width: 900px) {
   .sync-panel { grid-template-columns: 1fr; }
   .top-strip { grid-template-columns: 1fr; }
@@ -297,7 +313,7 @@ input[type="range"] { height: auto; padding: 0; accent-color: var(--accent); bor
   .sync-actions .button { flex: 1; }
   .sync-conflict { align-items: stretch; flex-direction: column; }
   .top-strip { gap: 12px; margin-bottom: 12px; }
-  .weather-section, .backup-card { padding: 18px; }
+  .weather-section, .music-section, .backup-card { padding: 18px; }
   .dashboard-grid { grid-template-columns: 1fr; gap: 12px; }
   .card, .card-full, .card-wide { grid-column: 1; padding: 18px; }
   .card-heading { align-items: flex-start; }
@@ -325,7 +341,6 @@ input[type="range"] { height: auto; padding: 0; accent-color: var(--accent); bor
   .weather-temp { margin-top: -8px; }
   .inline-form.compact { grid-template-columns: 1fr; }
   .link-grid { grid-template-columns: 1fr; }
-  .music-platforms { grid-template-columns: 1fr; }
   .countdown-item { grid-template-columns: 1fr auto; }
   .countdown-item .icon-button { grid-column: 2; grid-row: 1; }
   .count-badge { grid-column: 1 / -1; justify-self: start; }

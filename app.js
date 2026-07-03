@@ -97,6 +97,9 @@
   let weatherVisibilityBound = false;
   let weatherEventsBound = false;
   let weatherRequestSequence = 0;
+  let musicSearchController = null;
+  let musicTracks = [];
+  let currentMusicIndex = -1;
 
   // Persist first-run defaults immediately so deleting all items remains intentional.
   if (!localStorage.getItem(STORAGE.habits)) write(STORAGE.habits, habits);
@@ -411,6 +414,107 @@
       weatherEventsBound = true;
     }
     startWeatherAutoRefresh();
+  }
+
+  function formatMusicDuration(milliseconds) {
+    const seconds = Math.max(0, Math.round(Number(milliseconds || 0) / 1000));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  }
+
+  function setMusicStatus(message, isError = false) {
+    const status = $('#musicStatus');
+    status.textContent = message;
+    status.classList.toggle('error', isError);
+  }
+
+  function renderMusicResults() {
+    const container = $('#musicResults');
+    if (!musicTracks.length) {
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = musicTracks.map((track, index) => `
+      <button class="music-result${index === currentMusicIndex ? ' active' : ''}" type="button" data-music-index="${index}" aria-label="播放 ${esc(track.trackName)}，${esc(track.artistName)}">
+        <span class="music-result-mark" aria-hidden="true">▶</span>
+        <span class="music-result-copy"><strong>${esc(track.trackName)}</strong><span>${esc(track.artistName)}${track.collectionName ? ` · ${esc(track.collectionName)}` : ''}</span></span>
+        <span class="music-result-duration">${formatMusicDuration(track.trackTimeMillis)}</span>
+      </button>`).join('');
+  }
+
+  async function searchMusic(query) {
+    const term = String(query || '').trim();
+    if (!term) {
+      setMusicStatus('请输入歌曲或歌手名称。', true);
+      toast('请输入歌曲或歌手名称。', 'error');
+      return;
+    }
+    musicSearchController?.abort();
+    musicSearchController = new AbortController();
+    $('#musicSearchButton').disabled = true;
+    setMusicStatus('正在搜索歌曲…');
+    try {
+      const url = new URL('https://itunes.apple.com/search');
+      url.searchParams.set('term', term);
+      url.searchParams.set('media', 'music');
+      url.searchParams.set('entity', 'song');
+      url.searchParams.set('country', 'CN');
+      url.searchParams.set('limit', '15');
+      const response = await fetch(url.toString(), { signal: musicSearchController.signal });
+      if (!response.ok) throw new Error('音乐搜索服务暂时不可用');
+      const data = await response.json();
+      musicTracks = (Array.isArray(data.results) ? data.results : []).filter(track =>
+        typeof track.previewUrl === 'string' && typeof track.trackName === 'string' && typeof track.artistName === 'string'
+      );
+      currentMusicIndex = -1;
+      renderMusicResults();
+      setMusicStatus(musicTracks.length ? `找到 ${musicTracks.length} 首可试听歌曲，点击即可播放。` : '没有找到可试听结果，请换个关键词。', !musicTracks.length);
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      musicTracks = [];
+      currentMusicIndex = -1;
+      renderMusicResults();
+      setMusicStatus('音乐搜索失败，请检查网络后重试。', true);
+    } finally {
+      $('#musicSearchButton').disabled = false;
+    }
+  }
+
+  async function playMusic(index) {
+    const track = musicTracks[index];
+    if (!track) return;
+    const audio = $('#musicAudio');
+    currentMusicIndex = index;
+    audio.src = track.previewUrl;
+    $('#musicNowPlaying').className = 'music-now-playing';
+    $('#musicNowPlaying').innerHTML = `<div class="music-disc" aria-hidden="true">♪</div><div><strong>${esc(track.trackName)}</strong><span>${esc(track.artistName)} · 在线试听片段</span></div>`;
+    renderMusicResults();
+    try {
+      await audio.play();
+      setMusicStatus(`正在播放：${track.trackName} — ${track.artistName}`);
+    } catch {
+      setMusicStatus('浏览器暂时无法播放此歌曲，请选择其他结果。', true);
+    }
+  }
+
+  function initMusic() {
+    const audio = $('#musicAudio');
+    $('#musicSearchForm').addEventListener('submit', event => {
+      event.preventDefault();
+      searchMusic($('#musicSearchInput').value);
+    });
+    $('#musicResults').addEventListener('click', event => {
+      const button = event.target.closest('[data-music-index]');
+      if (button) playMusic(Number(button.dataset.musicIndex));
+    });
+    audio.addEventListener('play', () => $('#musicNowPlaying').classList.add('playing'));
+    audio.addEventListener('pause', () => $('#musicNowPlaying').classList.remove('playing'));
+    audio.addEventListener('ended', () => {
+      $('#musicNowPlaying').classList.remove('playing');
+      setMusicStatus('试听结束，可以继续选择下一首。');
+    });
+    audio.addEventListener('error', () => {
+      if (audio.src) setMusicStatus('这首歌暂时无法播放，请选择其他结果。', true);
+    });
   }
 
   function monthPrefix() { return todayKey().slice(0, 7); }
@@ -828,7 +932,7 @@
     $('#eventDate').min = '';
     $('#noteDate').value = todayKey();
     loadNote(todayKey());
-    initWeather(); renderTodos(); renderHabits(); renderEvents(); renderLinks(); renderProjects(); updateSummary(); renderMonthlyReview();
+    initWeather(); initMusic(); renderTodos(); renderHabits(); renderEvents(); renderLinks(); renderProjects(); updateSummary(); renderMonthlyReview();
   }
 
   window.PersonalDashboardCloudBridge = {
