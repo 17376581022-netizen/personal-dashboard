@@ -5,6 +5,7 @@
   const WEATHER_DATA_KEY = 'dashboardWeatherData';
   const WEATHER_UPDATED_AT_KEY = 'dashboardWeatherUpdatedAt';
   const WEATHER_REFRESH_INTERVAL = 30 * 60 * 1000;
+  const MUSIC_SEARCH_CACHE_KEY = 'personalDashboard.musicSearchCache.v1';
   const SYNC_DIRTY_AT_KEY = 'personalDashboard.syncDirtyAt.v1';
   let dashboardInitialized = false;
 
@@ -202,6 +203,32 @@
     $('#refresh-weather-btn').disabled = isLoading;
   }
 
+  async function fetchJsonWithRetry(url, { attempts = 2, timeout = 5000 } = {}) {
+    let lastError = new Error('网络请求失败');
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      let timer;
+      try {
+        const timeoutRequest = new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('网络请求超时')), timeout);
+        });
+        const response = await Promise.race([
+          fetch(url, { cache: 'no-store' }),
+          timeoutRequest
+        ]);
+        if (!response.ok) throw new Error(`服务返回 ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        lastError = error;
+        if (attempt < attempts - 1) {
+          await new Promise(resolve => setTimeout(resolve, 450 * (2 ** attempt)));
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw lastError;
+  }
+
   async function searchCity(cityName) {
     const name = String(cityName || '').trim();
     if (!name) {
@@ -213,9 +240,9 @@
     url.searchParams.set('count', '1');
     url.searchParams.set('language', 'zh');
     url.searchParams.set('format', 'json');
-    const response = await fetch(url.toString());
-    if (!response.ok) throw new Error('城市搜索失败，请稍后重试');
-    const data = await response.json();
+    let data;
+    try { data = await fetchJsonWithRetry(url.toString(), { attempts: 3, timeout: 5500 }); }
+    catch { throw new Error('城市搜索失败，已自动重试，请检查网络后再试'); }
     const result = data.results?.[0];
     if (!result) throw new Error('未找到城市，请换个名称试试');
     const location = {
@@ -236,9 +263,9 @@
     url.searchParams.set('longitude', String(location.longitude));
     url.searchParams.set('current', 'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,is_day');
     url.searchParams.set('timezone', 'auto');
-    const response = await fetch(url.toString());
-    if (!response.ok) throw new Error('天气服务请求失败');
-    const data = await response.json();
+    let data;
+    try { data = await fetchJsonWithRetry(url.toString(), { attempts: 2, timeout: 4500 }); }
+    catch { return fetchWeatherFallback(location); }
     if (!data.current || typeof data.current !== 'object') throw new Error('天气服务返回的数据不完整');
     return {
       location,
@@ -256,6 +283,53 @@
       timezone: data.timezone || location.timezone,
       fetchedAt: new Date().toISOString()
     };
+  }
+
+  async function fetchWeatherFallback(location) {
+    const url = new URL(`https://wttr.in/${encodeURIComponent(`${location.latitude},${location.longitude}`)}`);
+    url.searchParams.set('format', 'j1');
+    url.searchParams.set('lang', 'zh');
+    let data;
+    try { data = await fetchJsonWithRetry(url.toString(), { attempts: 2, timeout: 6500 }); }
+    catch { throw new Error('天气服务请求失败'); }
+    const condition = data.current_condition?.[0];
+    if (!condition || typeof condition !== 'object') throw new Error('备用天气服务返回的数据不完整');
+    let localHour = new Date().getHours();
+    try {
+      localHour = Number(new Intl.DateTimeFormat('en-US', { timeZone: location.timezone, hour: '2-digit', hour12: false }).format(new Date()));
+    } catch { /* Use the browser's local hour if the saved timezone is unavailable. */ }
+    const weatherText = translateFallbackWeather(condition.lang_zh?.[0]?.value || condition.weatherDesc?.[0]?.value || '未知天气');
+    return {
+      location,
+      current: {
+        time: new Date().toISOString(),
+        temperature_2m: condition.temp_C ?? null,
+        apparent_temperature: condition.FeelsLikeC ?? null,
+        relative_humidity_2m: condition.humidity ?? null,
+        precipitation: condition.precipMM ?? null,
+        weather_code: null,
+        weather_text: weatherText,
+        wind_speed_10m: condition.windspeedKmph ?? null,
+        is_day: localHour >= 6 && localHour < 18 ? 1 : 0
+      },
+      units: { temperature_2m: '°C', wind_speed_10m: 'km/h', precipitation: 'mm' },
+      timezone: location.timezone,
+      source: 'wttr.in',
+      fetchedAt: new Date().toISOString()
+    };
+  }
+
+  function translateFallbackWeather(value) {
+    const text = String(value || '').trim();
+    const translations = {
+      'clear': '晴', 'sunny': '晴', 'partly cloudy': '局部多云', 'cloudy': '多云', 'overcast': '阴',
+      'mist': '薄雾', 'fog': '雾', 'smoky haze': '烟霾', 'haze': '霾',
+      'patchy rain nearby': '附近有零星小雨', 'light rain': '小雨', 'moderate rain': '中雨', 'heavy rain': '大雨',
+      'light rain shower': '小阵雨', 'moderate or heavy rain shower': '中到大阵雨',
+      'thundery outbreaks in nearby': '附近有雷雨', 'patchy light rain with thunder': '局部雷阵雨',
+      'patchy snow nearby': '附近有零星小雪', 'light snow': '小雪', 'moderate snow': '中雪', 'heavy snow': '大雪'
+    };
+    return translations[text.toLowerCase()] || text || '未知天气';
   }
 
   function weatherValue(value, suffix = '', round = false) {
@@ -282,13 +356,14 @@
     const current = weatherData.current;
     const dayLabel = current.is_day === 1 ? '白天' : current.is_day === 0 ? '夜晚' : '--';
     const cacheLabel = cached ? '<span class="weather-cache-note">显示上次数据</span>' : '';
+    const sourceLabel = weatherData.source === 'wttr.in' ? '<span class="weather-cache-note">备用天气源</span>' : '';
     card.className = 'weather-card';
     card.innerHTML = `
       <div class="weather-main">
-        <div><p class="weather-location">${esc(weatherData.location.name)}${weatherData.location.country ? `，${esc(weatherData.location.country)}` : ''}</p><p class="weather-description">${getWeatherDescription(current.weather_code)} · ${dayLabel}</p></div>
+        <div><p class="weather-location">${esc(weatherData.location.name)}${weatherData.location.country ? `，${esc(weatherData.location.country)}` : ''}</p><p class="weather-description">${esc(current.weather_text || getWeatherDescription(current.weather_code))} · ${dayLabel}</p></div>
         <strong class="weather-temp">${weatherValue(current.temperature_2m, '°C', true)}</strong>
       </div>
-      <div class="weather-meta"><span>天气时间：${esc(formatWeatherDateTime(current.time))}</span><span>更新时间：${esc(formatWeatherDateTime(weatherData.fetchedAt))}</span>${cacheLabel}</div>
+      <div class="weather-meta"><span>天气时间：${esc(formatWeatherDateTime(current.time))}</span><span>更新时间：${esc(formatWeatherDateTime(weatherData.fetchedAt))}</span>${cacheLabel}${sourceLabel}</div>
       <div class="weather-grid">
         <div class="weather-item"><span>当前温度</span><strong>${weatherValue(current.temperature_2m, '°C', true)}</strong></div>
         <div class="weather-item"><span>体感温度</span><strong>${weatherValue(current.apparent_temperature, '°C', true)}</strong></div>
@@ -498,7 +573,8 @@
     setMusicStatus('正在搜索歌曲…');
     try {
       let data;
-      const forceCompatibilityMode = new URLSearchParams(location.search).get('musicCompat') === '1';
+      const forceCompatibilityMode = new URLSearchParams(location.search).get('musicCompat') === '1' ||
+        location.protocol === 'file:' || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
       if (forceCompatibilityMode) {
         data = await fetchMusicSearchJsonp(term);
       } else {
@@ -514,11 +590,24 @@
       musicTracks = (Array.isArray(data.results) ? data.results : []).filter(track =>
         typeof track.previewUrl === 'string' && typeof track.trackName === 'string' && typeof track.artistName === 'string'
       );
+      if (musicTracks.length) {
+        try {
+          localStorage.setItem(MUSIC_SEARCH_CACHE_KEY, JSON.stringify({ term, tracks: musicTracks, savedAt: new Date().toISOString() }));
+        } catch { /* Search still works when storage is full or unavailable. */ }
+      }
       currentMusicIndex = -1;
       renderMusicResults();
       setMusicStatus(musicTracks.length ? `找到 ${musicTracks.length} 首可试听歌曲，点击即可播放。` : '没有找到可试听结果，请换个关键词。', !musicTracks.length);
     } catch (error) {
       if (requestId !== musicSearchRequestId) return;
+      const cached = read(MUSIC_SEARCH_CACHE_KEY, null);
+      if (cached?.term === term && Array.isArray(cached.tracks) && cached.tracks.length) {
+        musicTracks = cached.tracks.filter(track => typeof track.previewUrl === 'string' && typeof track.trackName === 'string' && typeof track.artistName === 'string');
+        currentMusicIndex = -1;
+        renderMusicResults();
+        setMusicStatus(`网络暂时不可用，显示“${term}”的上次搜索结果。`);
+        return;
+      }
       musicTracks = [];
       currentMusicIndex = -1;
       renderMusicResults();

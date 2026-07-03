@@ -32,7 +32,7 @@
   }
 
   function setBusy(busy) {
-    ['#syncLogin', '#syncSignup', '#syncPhoneSendCode', '#syncPhoneVerify', '#syncWechatLogin', '#syncNow', '#syncLogout'].forEach(selector => {
+    ['#syncLogin', '#syncSignup', '#syncNow', '#syncLogout'].forEach(selector => {
       const element = $(selector);
       if (element) element.disabled = busy;
     });
@@ -43,7 +43,7 @@
     $('#syncSignedOut').classList.toggle('hidden', signedIn || !configured);
     $('#syncSignedIn').classList.toggle('hidden', !signedIn);
     $('#syncConfigHint').classList.toggle('hidden', configured);
-    $('#syncUserEmail').textContent = signedIn ? session.user.phone || session.user.email || '已登录' : '';
+    $('#syncUserEmail').textContent = signedIn ? session.user.email || '已登录' : '';
     if (!configured) setStatus('等待配置');
     else if (signedIn) setStatus('云端已连接', 'online');
     else setStatus('未登录');
@@ -138,64 +138,6 @@
       showError(error.message || '注册失败。');
       setStatus('注册失败');
     } finally { setBusy(false); }
-  }
-
-  function normalizePhone(value) {
-    const compact = String(value || '').replace(/[\s()-]/g, '');
-    if (/^1\d{10}$/.test(compact)) return `+86${compact}`;
-    if (/^\+\d{8,15}$/.test(compact)) return compact;
-    return '';
-  }
-
-  function switchAuthMode(mode) {
-    document.querySelectorAll('[data-auth-mode]').forEach(button => {
-      const active = button.dataset.authMode === mode;
-      button.classList.toggle('active', active);
-      button.setAttribute('aria-selected', String(active));
-    });
-    document.querySelectorAll('[data-auth-panel]').forEach(panel => {
-      panel.classList.toggle('hidden', panel.dataset.authPanel !== mode);
-    });
-    showError('');
-  }
-
-  async function sendPhoneCode() {
-    const phone = normalizePhone($('#syncPhone').value);
-    if (!phone) return showError('请输入有效手机号；中国大陆手机号可直接输入 11 位号码。');
-    setBusy(true); showError(''); setStatus('正在发送验证码…', 'syncing');
-    try {
-      await api('/auth/v1/otp', { method: 'POST', body: { phone, create_user: true } });
-      $('#syncPhone').value = phone;
-      setStatus('验证码已发送');
-      notify('短信验证码已发送，请注意查收。');
-      $('#syncPhoneCode').focus();
-    } catch (error) {
-      showError(error.message || '验证码发送失败。请确认短信服务已配置。');
-      setStatus('发送失败');
-    } finally { setBusy(false); }
-  }
-
-  async function verifyPhoneCode() {
-    const phone = normalizePhone($('#syncPhone').value);
-    const token = $('#syncPhoneCode').value.trim();
-    if (!phone || !/^\d{4,8}$/.test(token)) return showError('请输入手机号和有效的短信验证码。');
-    setBusy(true); showError(''); setStatus('正在验证…', 'syncing');
-    try {
-      const result = await api('/auth/v1/verify', { method: 'POST', body: { type: 'sms', phone, token } });
-      if (!result?.access_token) throw new Error('验证码验证成功，但登录会话无效。');
-      saveSession(result);
-      $('#syncPhoneCode').value = '';
-      notify('手机号验证成功，正在同步。');
-      await reconcile();
-    } catch (error) {
-      showError(error.message || '验证码无效或已过期。');
-      setStatus('验证失败');
-    } finally { setBusy(false); }
-  }
-
-  function startWechatLogin() {
-    showError('微信登录需要先配置微信开放平台 AppID、AppSecret 和安全回调服务，当前尚未启用。');
-    setStatus('微信待配置');
   }
 
   async function signOut() {
@@ -302,19 +244,11 @@
     renderAuth();
     $('#syncLogin').addEventListener('click', signIn);
     $('#syncSignup').addEventListener('click', signUp);
-    $('#syncPhoneSendCode').addEventListener('click', sendPhoneCode);
-    $('#syncPhoneVerify').addEventListener('click', verifyPhoneCode);
-    $('#syncWechatLogin').addEventListener('click', startWechatLogin);
-    document.querySelectorAll('[data-auth-mode]').forEach(button => {
-      button.addEventListener('click', () => switchAuthMode(button.dataset.authMode));
-    });
     $('#syncLogout').addEventListener('click', signOut);
     $('#syncNow').addEventListener('click', reconcile);
     $('#syncUseCloud').addEventListener('click', useCloudVersion);
     $('#syncUseLocal').addEventListener('click', uploadLocalVersion);
     $('#syncPassword').addEventListener('keydown', event => { if (event.key === 'Enter') signIn(); });
-    $('#syncPhone').addEventListener('keydown', event => { if (event.key === 'Enter') sendPhoneCode(); });
-    $('#syncPhoneCode').addEventListener('keydown', event => { if (event.key === 'Enter') verifyPhoneCode(); });
     window.addEventListener('dashboard:local-change', schedulePush);
     window.addEventListener('online', () => reconcile());
     document.addEventListener('visibilitychange', () => { if (!document.hidden) reconcile(); });

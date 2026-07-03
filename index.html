@@ -23,32 +23,15 @@
 
     <section class="sync-panel" aria-labelledby="syncTitle">
       <div class="sync-heading">
-        <div><span class="section-kicker">CLOUD SYNC</span><h2 id="syncTitle">账号与同步</h2></div>
+        <div><span class="section-kicker">CLOUD SYNC</span><h2 id="syncTitle">邮箱登录与同步</h2></div>
         <div class="sync-state"><span id="syncDot" class="sync-dot"></span><span id="syncStatus">本地模式</span></div>
       </div>
       <p id="syncConfigHint" class="sync-hint hidden">云端尚未配置。请先填写 cloud-config.js 并执行数据库脚本。</p>
       <div id="syncSignedOut" class="sync-auth-form">
-        <div class="auth-tabs" role="tablist" aria-label="账号登录方式">
-          <button class="auth-tab active" type="button" data-auth-mode="phone" role="tab" aria-selected="true">手机号</button>
-          <button class="auth-tab" type="button" data-auth-mode="wechat" role="tab" aria-selected="false">微信</button>
-          <button class="auth-tab" type="button" data-auth-mode="email" role="tab" aria-selected="false">邮箱</button>
-        </div>
-        <div id="syncPhonePanel" class="auth-method-panel" data-auth-panel="phone">
-          <input id="syncPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="手机号，例如 13800138000" aria-label="同步账号手机号">
-          <button id="syncPhoneSendCode" class="button secondary" type="button">发送验证码</button>
-          <input id="syncPhoneCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="短信验证码" aria-label="短信验证码">
-          <button id="syncPhoneVerify" class="button primary" type="button">验证并登录</button>
-        </div>
-        <div id="syncWechatPanel" class="auth-method-panel hidden" data-auth-panel="wechat">
-          <p class="auth-method-note">使用微信账号快速绑定并登录。</p>
-          <button id="syncWechatLogin" class="button wechat-button" type="button">微信绑定 / 登录</button>
-        </div>
-        <div id="syncEmailPanel" class="auth-method-panel hidden" data-auth-panel="email">
-          <input id="syncEmail" type="email" autocomplete="email" placeholder="邮箱" aria-label="同步账号邮箱">
-          <input id="syncPassword" type="password" minlength="6" autocomplete="current-password" placeholder="密码（至少 6 位）" aria-label="同步账号密码">
-          <button id="syncLogin" class="button primary" type="button">登录</button>
-          <button id="syncSignup" class="button ghost" type="button">注册</button>
-        </div>
+        <input id="syncEmail" type="email" autocomplete="email" placeholder="邮箱" aria-label="同步账号邮箱">
+        <input id="syncPassword" type="password" minlength="6" autocomplete="current-password" placeholder="密码（至少 6 位）" aria-label="同步账号密码">
+        <button id="syncLogin" class="button primary" type="button">登录</button>
+        <button id="syncSignup" class="button ghost" type="button">注册</button>
       </div>
       <div id="syncSignedIn" class="sync-account hidden">
         <span id="syncUserEmail"></span>
