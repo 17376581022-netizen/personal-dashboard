@@ -5,7 +5,6 @@
   const WEATHER_DATA_KEY = 'dashboardWeatherData';
   const WEATHER_UPDATED_AT_KEY = 'dashboardWeatherUpdatedAt';
   const WEATHER_REFRESH_INTERVAL = 30 * 60 * 1000;
-  const MUSIC_SEARCH_CACHE_KEY = 'personalDashboard.musicSearchCache.v1';
   const SYNC_DIRTY_AT_KEY = 'personalDashboard.syncDirtyAt.v1';
   let dashboardInitialized = false;
 
@@ -98,9 +97,16 @@
   let weatherVisibilityBound = false;
   let weatherEventsBound = false;
   let weatherRequestSequence = 0;
-  let musicSearchRequestId = 0;
   let musicTracks = [];
+  let visibleMusicTracks = [];
   let currentMusicIndex = -1;
+  let musicAudioContext = null;
+  let musicMaster = null;
+  let musicSchedulerTimer = null;
+  let musicNoiseBuffer = null;
+  let musicNextStepTime = 0;
+  let musicStep = 0;
+  let musicIsPlaying = false;
 
   // Persist first-run defaults immediately so deleting all items remains intentional.
   if (!localStorage.getItem(STORAGE.habits)) write(STORAGE.habits, habits);
@@ -491,168 +497,215 @@
     startWeatherAutoRefresh();
   }
 
-  function formatMusicDuration(milliseconds) {
-    const seconds = Math.max(0, Math.round(Number(milliseconds || 0) / 1000));
-    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-  }
-
   function setMusicStatus(message, isError = false) {
     const status = $('#musicStatus');
     status.textContent = message;
     status.classList.toggle('error', isError);
   }
 
+  function createMusicCatalog() {
+    const moods = ['午夜', '丝绒', '霓虹', '月光', '雨夜', '暖风', '琥珀', '蓝调', '迷雾', '星尘', '慢热', '柔光', '海盐', '微醺', '静电', '城市', '深蓝', '余温', '暗香', '晨雾', '暮色', '银色', '低语', '心跳', '漂浮'];
+    const scenes = ['回声', '街角', '信号', '旅馆', '天台', '唱片', '来电', '车窗', '梦境', '潮汐', '留声', '侧影', '胶片', '远方', '电台', '灯火', '花园', '沙发', '日记', '轨道'];
+    const styles = ['Neo Soul', 'Slow Jam', 'Lo-fi R&B', 'Bedroom R&B', 'Jazz R&B', 'Ambient R&B', 'Funk R&B', 'Soulful R&B'];
+    const keys = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+    const catalog = [];
+    moods.forEach((mood, moodIndex) => scenes.forEach((scene, sceneIndex) => {
+      const number = moodIndex * scenes.length + sceneIndex + 1;
+      const seed = number * 7919;
+      catalog.push({
+        id: `rnb-${String(number).padStart(3, '0')}`,
+        trackName: `${mood}${scene}`,
+        artistName: 'Dashboard AI Sessions',
+        collectionName: styles[(number * 7) % styles.length],
+        bpm: 68 + (number * 11) % 29,
+        key: keys[(number * 5) % keys.length],
+        keyIndex: (number * 5) % keys.length,
+        seed
+      });
+    }));
+    return catalog;
+  }
+
   function renderMusicResults() {
     const container = $('#musicResults');
-    if (!musicTracks.length) {
-      container.innerHTML = '';
+    if (!visibleMusicTracks.length) {
+      container.innerHTML = '<p class="music-empty">没有匹配的曲目，换个关键词试试。</p>';
       return;
     }
-    container.innerHTML = musicTracks.map((track, index) => `
-      <button class="music-result${index === currentMusicIndex ? ' active' : ''}" type="button" data-music-index="${index}" aria-label="播放 ${esc(track.trackName)}，${esc(track.artistName)}">
-        <span class="music-result-mark" aria-hidden="true">▶</span>
-        <span class="music-result-copy"><strong>${esc(track.trackName)}</strong><span>${esc(track.artistName)}${track.collectionName ? ` · ${esc(track.collectionName)}` : ''}</span></span>
-        <span class="music-result-duration">${formatMusicDuration(track.trackTimeMillis)}</span>
-      </button>`).join('');
+    container.innerHTML = visibleMusicTracks.map(track => {
+      const index = musicTracks.findIndex(item => item.id === track.id);
+      return `
+      <button class="music-result${index === currentMusicIndex ? ' active' : ''}" type="button" data-music-index="${index}" aria-label="播放 ${esc(track.trackName)}，${esc(track.collectionName)}">
+        <span class="music-result-mark" aria-hidden="true">${index === currentMusicIndex && musicIsPlaying ? '■' : '▶'}</span>
+        <span class="music-result-copy"><strong>${esc(track.trackName)}</strong><span>#${track.id.slice(-3)} · ${esc(track.collectionName)} · ${track.key} minor</span></span>
+        <span class="music-result-duration">${track.bpm} BPM · ∞</span>
+      </button>`;
+    }).join('');
   }
 
-  function createMusicSearchUrl(term, callback = '') {
-    const url = new URL('https://itunes.apple.com/search');
-    url.searchParams.set('term', term);
-    url.searchParams.set('media', 'music');
-    url.searchParams.set('entity', 'song');
-    url.searchParams.set('country', 'CN');
-    url.searchParams.set('limit', '15');
-    if (callback) url.searchParams.set('callback', callback);
-    return url.toString();
+  function searchMusic(query) {
+    const term = String(query || '').trim().toLocaleLowerCase('zh-CN');
+    visibleMusicTracks = term ? musicTracks.filter(track =>
+      `${track.trackName} ${track.collectionName} ${track.id} ${track.bpm} ${track.key}`.toLocaleLowerCase('zh-CN').includes(term)
+    ) : [...musicTracks];
+    renderMusicResults();
+    setMusicStatus(term ? `找到 ${visibleMusicTracks.length} 首匹配曲目。` : `曲库共 ${musicTracks.length} 首原创生成式 R&B。`, !visibleMusicTracks.length);
   }
 
-  async function fetchMusicSearch(term) {
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('音乐搜索请求超时')), 6000));
-    const request = fetch(createMusicSearchUrl(term)).then(response => {
-      if (!response.ok) throw new Error('音乐搜索服务暂时不可用');
-      return response.json();
-    });
-    return Promise.race([request, timeout]);
+  function seededValue(seed, step, salt = 0) {
+    const value = Math.sin(seed * 0.001 + step * 12.9898 + salt * 78.233) * 43758.5453;
+    return value - Math.floor(value);
   }
 
-  function fetchMusicSearchJsonp(term) {
-    return new Promise((resolve, reject) => {
-      const callback = `dashboardMusicCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      const script = document.createElement('script');
-      let settled = false;
-      const cleanup = () => {
-        script.remove();
-        try { delete window[callback]; } catch { window[callback] = undefined; }
-      };
-      const finish = (handler, value) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        cleanup();
-        handler(value);
-      };
-      window[callback] = data => finish(resolve, data);
-      script.onerror = () => finish(reject, new Error('兼容搜索通道不可用'));
-      script.referrerPolicy = 'no-referrer';
-      script.src = createMusicSearchUrl(term, callback);
-      const timer = setTimeout(() => finish(reject, new Error('兼容搜索请求超时')), 9000);
-      document.head.append(script);
-    });
+  function midiFrequency(note) {
+    return 440 * Math.pow(2, (note - 69) / 12);
   }
 
-  async function searchMusic(query) {
-    const term = String(query || '').trim();
-    if (!term) {
-      setMusicStatus('请输入歌曲或歌手名称。', true);
-      toast('请输入歌曲或歌手名称。', 'error');
-      return;
+  function createNoiseBuffer() {
+    if (musicNoiseBuffer) return musicNoiseBuffer;
+    const length = Math.floor(musicAudioContext.sampleRate * 0.5);
+    musicNoiseBuffer = musicAudioContext.createBuffer(1, length, musicAudioContext.sampleRate);
+    const data = musicNoiseBuffer.getChannelData(0);
+    for (let i = 0; i < length; i += 1) data[i] = Math.random() * 2 - 1;
+    return musicNoiseBuffer;
+  }
+
+  function scheduleTone(frequency, start, duration, type, volume, destination = musicMaster) {
+    const oscillator = musicAudioContext.createOscillator();
+    const gain = musicAudioContext.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), start + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    oscillator.connect(gain).connect(destination);
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.03);
+  }
+
+  function scheduleNoise(start, duration, volume, highpass = 1500) {
+    const source = musicAudioContext.createBufferSource();
+    const filter = musicAudioContext.createBiquadFilter();
+    const gain = musicAudioContext.createGain();
+    source.buffer = createNoiseBuffer();
+    filter.type = 'highpass';
+    filter.frequency.value = highpass;
+    gain.gain.setValueAtTime(volume, start);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    source.connect(filter).connect(gain).connect(musicMaster);
+    source.start(start);
+    source.stop(start + duration);
+  }
+
+  function scheduleMusicStep(track, step, start) {
+    const beat = 60 / track.bpm;
+    const root = 42 + track.keyIndex;
+    const progression = [0, 8, 3, 10];
+    const chordRoot = root + progression[Math.floor(step / 8) % progression.length];
+    if (step % 8 === 0) {
+      [0, 3, 7, 10].forEach((interval, voice) => scheduleTone(midiFrequency(chordRoot + 12 + interval), start, beat * 3.7, voice % 2 ? 'sine' : 'triangle', 0.026));
     }
-    const requestId = ++musicSearchRequestId;
-    $('#musicSearchButton').disabled = true;
-    setMusicStatus('正在搜索歌曲…');
-    try {
-      let data;
-      const forceCompatibilityMode = new URLSearchParams(location.search).get('musicCompat') === '1' ||
-        location.protocol === 'file:' || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-      if (forceCompatibilityMode) {
-        data = await fetchMusicSearchJsonp(term);
-      } else {
-        try {
-          data = await fetchMusicSearch(term);
-        } catch {
-          if (requestId !== musicSearchRequestId) return;
-          setMusicStatus('正在切换兼容搜索通道…');
-          data = await fetchMusicSearchJsonp(term);
-        }
-      }
-      if (requestId !== musicSearchRequestId) return;
-      musicTracks = (Array.isArray(data.results) ? data.results : []).filter(track =>
-        typeof track.previewUrl === 'string' && typeof track.trackName === 'string' && typeof track.artistName === 'string'
-      );
-      if (musicTracks.length) {
-        try {
-          localStorage.setItem(MUSIC_SEARCH_CACHE_KEY, JSON.stringify({ term, tracks: musicTracks, savedAt: new Date().toISOString() }));
-        } catch { /* Search still works when storage is full or unavailable. */ }
-      }
-      currentMusicIndex = -1;
-      renderMusicResults();
-      setMusicStatus(musicTracks.length ? `找到 ${musicTracks.length} 首可试听歌曲，点击即可播放。` : '没有找到可试听结果，请换个关键词。', !musicTracks.length);
-    } catch (error) {
-      if (requestId !== musicSearchRequestId) return;
-      const cached = read(MUSIC_SEARCH_CACHE_KEY, null);
-      if (cached?.term === term && Array.isArray(cached.tracks) && cached.tracks.length) {
-        musicTracks = cached.tracks.filter(track => typeof track.previewUrl === 'string' && typeof track.trackName === 'string' && typeof track.artistName === 'string');
-        currentMusicIndex = -1;
-        renderMusicResults();
-        setMusicStatus(`网络暂时不可用，显示“${term}”的上次搜索结果。`);
-        return;
-      }
-      musicTracks = [];
-      currentMusicIndex = -1;
-      renderMusicResults();
-      setMusicStatus('音乐搜索失败，请检查网络后重试。', true);
-    } finally {
-      if (requestId === musicSearchRequestId) $('#musicSearchButton').disabled = false;
+    if (step % 4 === 0 || (step % 4 === 3 && seededValue(track.seed, step, 1) > 0.46)) {
+      const bassNote = chordRoot + (seededValue(track.seed, step, 2) > 0.72 ? 7 : 0);
+      scheduleTone(midiFrequency(bassNote), start, beat * 0.8, 'sine', 0.12);
+    }
+    if (step % 8 === 0 || step % 8 === 5) {
+      const kick = musicAudioContext.createOscillator();
+      const kickGain = musicAudioContext.createGain();
+      kick.frequency.setValueAtTime(120, start);
+      kick.frequency.exponentialRampToValueAtTime(44, start + 0.16);
+      kickGain.gain.setValueAtTime(0.24, start);
+      kickGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.2);
+      kick.connect(kickGain).connect(musicMaster);
+      kick.start(start); kick.stop(start + 0.22);
+    }
+    if (step % 8 === 4) scheduleNoise(start, 0.2, 0.105, 900);
+    if (step % 2 === 0) scheduleNoise(start + seededValue(track.seed, step, 3) * 0.012, 0.045, 0.025, 5200);
+    if (step % 8 === 6 && seededValue(track.seed, step, 4) > 0.34) {
+      const melody = chordRoot + 24 + [0, 3, 7, 10][Math.floor(seededValue(track.seed, step, 5) * 4)];
+      scheduleTone(midiFrequency(melody), start, beat * 0.65, 'sine', 0.035);
     }
   }
 
-  async function playMusic(index) {
+  function stopMusic(updateStatus = true) {
+    if (musicSchedulerTimer) clearInterval(musicSchedulerTimer);
+    musicSchedulerTimer = null;
+    musicIsPlaying = false;
+    if (musicMaster && musicAudioContext) {
+      const oldMaster = musicMaster;
+      oldMaster.gain.cancelScheduledValues(musicAudioContext.currentTime);
+      oldMaster.gain.setTargetAtTime(0.0001, musicAudioContext.currentTime, 0.025);
+      setTimeout(() => { try { oldMaster.disconnect(); } catch { /* Already disconnected. */ } }, 180);
+      musicMaster = null;
+    }
+    $('#musicNowPlaying').classList.remove('playing');
+    if (updateStatus && currentMusicIndex >= 0) setMusicStatus('已暂停。再次点击播放可重新开始循环。');
+    renderMusicResults();
+  }
+
+  function startMusic(index) {
     const track = musicTracks[index];
     if (!track) return;
-    const audio = $('#musicAudio');
-    currentMusicIndex = index;
-    audio.src = track.previewUrl;
-    $('#musicNowPlaying').className = 'music-now-playing';
-    $('#musicNowPlaying').innerHTML = `<div class="music-disc" aria-hidden="true">♪</div><div><strong>${esc(track.trackName)}</strong><span>${esc(track.artistName)} · 在线试听片段</span></div>`;
-    renderMusicResults();
     try {
-      await audio.play();
-      setMusicStatus(`正在播放：${track.trackName} — ${track.artistName}`);
-    } catch {
-      setMusicStatus('浏览器暂时无法播放此歌曲，请选择其他结果。', true);
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) throw new Error('Web Audio unsupported');
+      musicAudioContext ||= new AudioContextClass();
+      if (musicAudioContext.state === 'suspended') {
+        musicAudioContext.resume().catch(() => setMusicStatus('浏览器阻止了声音，请再次点击当前曲目。', true));
+      }
+      stopMusic(false);
+      currentMusicIndex = index;
+      musicMaster = musicAudioContext.createGain();
+      const compressor = musicAudioContext.createDynamicsCompressor();
+      musicMaster.gain.setValueAtTime(0.78, musicAudioContext.currentTime);
+      musicMaster.connect(compressor).connect(musicAudioContext.destination);
+      musicStep = 0;
+      musicNextStepTime = musicAudioContext.currentTime + 0.06;
+      musicIsPlaying = true;
+      const scheduler = () => {
+        while (musicNextStepTime < musicAudioContext.currentTime + 0.14) {
+          scheduleMusicStep(track, musicStep, musicNextStepTime);
+          musicNextStepTime += (60 / track.bpm) / 2;
+          musicStep = (musicStep + 1) % 32;
+        }
+      };
+      scheduler();
+      musicSchedulerTimer = setInterval(scheduler, 30);
+      $('#musicToggleButton').disabled = false;
+      $('#musicNowPlaying').className = 'music-now-playing playing';
+      $('#musicNowPlaying').innerHTML = `<div class="music-disc" aria-hidden="true">♪</div><div><strong>${esc(track.trackName)}</strong><span>${esc(track.collectionName)} · ${track.key} minor · ${track.bpm} BPM · 循环中</span></div>`;
+      setMusicStatus(`正在循环播放：${track.trackName}。`);
+      renderMusicResults();
+    } catch (error) {
+      setMusicStatus('浏览器无法启动声音。请确认未处于静音模式，并再次点击播放。', true);
     }
   }
 
   function initMusic() {
-    const audio = $('#musicAudio');
+    musicTracks = createMusicCatalog();
+    visibleMusicTracks = [...musicTracks];
+    renderMusicResults();
     $('#musicSearchForm').addEventListener('submit', event => {
       event.preventDefault();
       searchMusic($('#musicSearchInput').value);
     });
     $('#musicResults').addEventListener('click', event => {
       const button = event.target.closest('[data-music-index]');
-      if (button) playMusic(Number(button.dataset.musicIndex));
+      if (button) startMusic(Number(button.dataset.musicIndex));
     });
-    audio.addEventListener('play', () => $('#musicNowPlaying').classList.add('playing'));
-    audio.addEventListener('pause', () => $('#musicNowPlaying').classList.remove('playing'));
-    audio.addEventListener('ended', () => {
-      $('#musicNowPlaying').classList.remove('playing');
-      setMusicStatus('试听结束，可以继续选择下一首。');
+    $('#musicToggleButton').addEventListener('click', () => {
+      if (musicIsPlaying) stopMusic();
+      else if (currentMusicIndex >= 0) startMusic(currentMusicIndex);
     });
-    audio.addEventListener('error', () => {
-      if (audio.src) setMusicStatus('这首歌暂时无法播放，请选择其他结果。', true);
+    $('#musicRandomButton').addEventListener('click', () => {
+      const index = Math.floor(Math.random() * musicTracks.length);
+      startMusic(index);
     });
+    $('#musicShowAllButton').addEventListener('click', () => {
+      $('#musicSearchInput').value = '';
+      searchMusic('');
+    });
+    window.addEventListener('pagehide', () => stopMusic(false));
   }
 
   function monthPrefix() { return todayKey().slice(0, 7); }

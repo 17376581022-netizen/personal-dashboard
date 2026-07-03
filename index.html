@@ -77,21 +77,26 @@
       <section class="music-section" aria-labelledby="musicTitle">
         <div class="music-section-header">
           <div><span class="section-kicker">NOW PLAYING</span><h2 id="musicTitle">音乐点播</h2></div>
-          <span class="music-source">在线试听</span>
+          <span class="music-source">500 首原创生成式 R&amp;B</span>
         </div>
         <form id="musicSearchForm" class="music-search-form">
-          <label class="sr-only" for="musicSearchInput">搜索歌曲或歌手</label>
-          <input id="musicSearchInput" maxlength="80" autocomplete="off" placeholder="输入歌曲或歌手名称" required>
-          <button id="musicSearchButton" class="button primary" type="submit">搜索</button>
+          <label class="sr-only" for="musicSearchInput">筛选曲名或风格</label>
+          <input id="musicSearchInput" maxlength="80" autocomplete="off" placeholder="筛选曲名、编号或风格">
+          <button id="musicSearchButton" class="button primary" type="submit">筛选</button>
         </form>
-        <p id="musicStatus" class="music-status" role="status">搜索一首歌，让仪表盘有点声音。</p>
+        <p id="musicStatus" class="music-status" role="status">500 首本地 R&amp;B 曲目已就绪，点击任意曲目开始循环播放。</p>
         <div id="musicNowPlaying" class="music-now-playing empty">
           <div class="music-disc" aria-hidden="true">♪</div>
-          <div><strong>尚未播放</strong><span>选择搜索结果即可在此播放</span></div>
+          <div><strong>尚未播放</strong><span>浏览器实时生成 · 无外部音乐平台</span></div>
         </div>
-        <audio id="musicAudio" class="music-audio" controls preload="none">您的浏览器不支持音频播放。</audio>
+        <div class="music-player-controls">
+          <button id="musicToggleButton" class="button ghost" type="button" disabled>播放 / 暂停</button>
+          <button id="musicRandomButton" class="button ghost" type="button">随机播放</button>
+          <button id="musicShowAllButton" class="button ghost" type="button">显示全部</button>
+          <span id="musicLoopBadge" class="music-loop-badge">自动循环</span>
+        </div>
         <div id="musicResults" class="music-results" aria-live="polite"></div>
-        <p class="music-notice">搜索结果提供页面内试听片段，不会跳转外部平台。</p>
+        <p class="music-notice">音乐由 Web Audio 在本机实时合成，不下载、不跳转、不调用第三方曲库；可用于本仪表盘背景播放。</p>
       </section>
 
     </section>
