@@ -208,7 +208,7 @@
     const url = new URL('https://geocoding-api.open-meteo.com/v1/search');
     url.searchParams.set('name', name);
     url.searchParams.set('count', '1');
-    url.searchParams.set('language', 'en');
+    url.searchParams.set('language', 'zh');
     url.searchParams.set('format', 'json');
     const response = await fetch(url.toString());
     if (!response.ok) throw new Error('城市搜索失败，请稍后重试');
@@ -400,6 +400,13 @@
           event.preventDefault();
           setWeatherCity(event.currentTarget.value);
         }
+      });
+      document.querySelectorAll('[data-weather-city]').forEach(button => {
+        button.addEventListener('click', () => {
+          const city = button.dataset.weatherCity;
+          $('#weather-city-input').value = city;
+          setWeatherCity(city);
+        });
       });
       weatherEventsBound = true;
     }

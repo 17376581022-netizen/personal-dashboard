@@ -68,7 +68,13 @@ h2 { margin: 2px 0 0; font-size: 1.23rem; letter-spacing: -.02em; }
 .sync-dot { width: 8px; height: 8px; background: var(--muted); border-radius: 50%; box-shadow: 0 0 0 4px rgba(143,157,169,.08); }
 .sync-dot.online { background: var(--accent); box-shadow: 0 0 0 4px rgba(102,214,167,.1); }
 .sync-dot.syncing { background: var(--warning); box-shadow: 0 0 0 4px rgba(242,201,109,.1); }
-.sync-auth-form { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) auto auto; gap: 8px; }
+.sync-auth-form { display: grid; gap: 10px; }
+.auth-tabs { display: flex; flex-wrap: wrap; gap: 7px; }
+.auth-tab { min-height: 34px; padding: 0 13px; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 999px; }
+.auth-tab.active { color: #07140f; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+.auth-method-panel { display: grid; grid-template-columns: minmax(145px, 1fr) auto minmax(110px, .65fr) auto; gap: 8px; align-items: center; }
+.auth-method-note { margin: 0; color: var(--muted); font-size: .84rem; }
+.wechat-button { color: #07140f; background: #79d65c; border-color: #79d65c; }
 .sync-account { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .sync-account > span { overflow: hidden; color: var(--blue); text-overflow: ellipsis; white-space: nowrap; }
 .sync-actions { display: flex; gap: 8px; }
@@ -90,6 +96,9 @@ h2 { margin: 2px 0 0; font-size: 1.23rem; letter-spacing: -.02em; }
 .weather-section-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 15px; }
 .weather-section .muted { margin: 0; color: var(--muted); font-size: .82rem; text-align: right; }
 .weather-controls { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; gap: 9px; margin-bottom: 13px; }
+.weather-popular-cities { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -3px 0 13px; color: var(--muted); font-size: .78rem; }
+.weather-popular-cities button { min-height: 29px; padding: 0 9px; color: var(--blue); background: rgba(127,181,255,.07); border: 1px solid rgba(127,181,255,.18); border-radius: 999px; }
+.weather-popular-cities button:hover { color: var(--text); border-color: var(--blue); }
 .weather-card { min-height: 132px; padding: 17px; background: #0e151d; border: 1px solid var(--border); border-radius: 14px; }
 .weather-card.empty { display: grid; place-items: center; color: var(--muted); border-style: dashed; text-align: center; }
 .weather-card.empty p { margin: 0; }
@@ -196,6 +205,20 @@ input[type="range"] { height: auto; padding: 0; accent-color: var(--accent); bor
 .link-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .link-item .icon-button { position: absolute; top: 11px; right: 5px; }
 
+.music-card { background: linear-gradient(145deg, rgba(38, 28, 48, .94), rgba(17, 24, 33, .96)); }
+.music-intro { margin: -10px 0 16px; color: var(--muted); font-size: .84rem; }
+.music-platforms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.music-platform { display: flex; align-items: center; gap: 11px; min-width: 0; padding: 11px 12px; color: var(--text); background: #0e151d; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; transition: transform .15s, border-color .15s; }
+.music-platform:hover { transform: translateY(-2px); border-color: var(--accent); }
+.music-platform > span:last-child { min-width: 0; }
+.music-platform strong, .music-platform small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-platform small { margin-top: 2px; color: var(--muted); font-size: .72rem; }
+.music-logo { display: grid; place-items: center; flex: 0 0 auto; width: 34px; height: 34px; color: #fff; background: #d43b3b; border-radius: 10px; font-weight: 800; }
+.qqmusic .music-logo { color: #102218; background: #64d68d; }
+.kugou .music-logo { background: #45a7ff; }
+.kuwo .music-logo { color: #241b00; background: #f3cb48; }
+.migu .music-logo { background: #e9679a; }
+
 .project-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: -4px 0 20px; padding: 18px; background: rgba(7, 12, 17, .35); border: 1px solid var(--border); border-radius: 14px; }
 .field-label { color: var(--muted); font-size: .78rem; }
 .field-label input { margin-top: 4px; }
@@ -259,6 +282,7 @@ input[type="range"] { height: auto; padding: 0; accent-color: var(--accent); bor
   .project-form { grid-template-columns: repeat(2, 1fr); }
   .link-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .weather-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .auth-method-panel { grid-template-columns: 1fr auto; }
 }
 
 @media (max-width: 680px) {
@@ -267,8 +291,8 @@ input[type="range"] { height: auto; padding: 0; accent-color: var(--accent); bor
   .date-time { min-width: 0; text-align: left; }
   .sync-panel { gap: 12px; margin-bottom: 12px; padding: 18px; }
   .sync-heading, .sync-account { align-items: flex-start; flex-direction: column; }
-  .sync-auth-form { grid-template-columns: 1fr 1fr; }
-  .sync-auth-form input { grid-column: 1 / -1; }
+  .auth-method-panel { grid-template-columns: 1fr 1fr; }
+  .auth-method-panel input, .auth-method-note { grid-column: 1 / -1; }
   .sync-actions { width: 100%; }
   .sync-actions .button { flex: 1; }
   .sync-conflict { align-items: stretch; flex-direction: column; }
@@ -292,14 +316,16 @@ input[type="range"] { height: auto; padding: 0; accent-color: var(--accent); bor
 }
 
 @media (max-width: 420px) {
-  .sync-auth-form { grid-template-columns: 1fr; }
-  .sync-auth-form input { grid-column: 1; }
+  .auth-method-panel { grid-template-columns: 1fr; }
+  .auth-method-panel input, .auth-method-note { grid-column: 1; }
+  .auth-method-panel .button { width: 100%; }
   .weather-controls, .weather-grid { grid-template-columns: 1fr; }
   .weather-controls input { grid-column: 1; }
   .weather-main { grid-template-columns: 1fr; }
   .weather-temp { margin-top: -8px; }
   .inline-form.compact { grid-template-columns: 1fr; }
   .link-grid { grid-template-columns: 1fr; }
+  .music-platforms { grid-template-columns: 1fr; }
   .countdown-item { grid-template-columns: 1fr auto; }
   .countdown-item .icon-button { grid-column: 2; grid-row: 1; }
   .count-badge { grid-column: 1 / -1; justify-self: start; }

@@ -28,10 +28,27 @@
       </div>
       <p id="syncConfigHint" class="sync-hint hidden">云端尚未配置。请先填写 cloud-config.js 并执行数据库脚本。</p>
       <div id="syncSignedOut" class="sync-auth-form">
-        <input id="syncEmail" type="email" autocomplete="email" placeholder="邮箱" aria-label="同步账号邮箱">
-        <input id="syncPassword" type="password" minlength="6" autocomplete="current-password" placeholder="密码（至少 6 位）" aria-label="同步账号密码">
-        <button id="syncLogin" class="button primary" type="button">登录</button>
-        <button id="syncSignup" class="button ghost" type="button">注册</button>
+        <div class="auth-tabs" role="tablist" aria-label="账号登录方式">
+          <button class="auth-tab active" type="button" data-auth-mode="phone" role="tab" aria-selected="true">手机号</button>
+          <button class="auth-tab" type="button" data-auth-mode="wechat" role="tab" aria-selected="false">微信</button>
+          <button class="auth-tab" type="button" data-auth-mode="email" role="tab" aria-selected="false">邮箱</button>
+        </div>
+        <div id="syncPhonePanel" class="auth-method-panel" data-auth-panel="phone">
+          <input id="syncPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="手机号，例如 13800138000" aria-label="同步账号手机号">
+          <button id="syncPhoneSendCode" class="button secondary" type="button">发送验证码</button>
+          <input id="syncPhoneCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="短信验证码" aria-label="短信验证码">
+          <button id="syncPhoneVerify" class="button primary" type="button">验证并登录</button>
+        </div>
+        <div id="syncWechatPanel" class="auth-method-panel hidden" data-auth-panel="wechat">
+          <p class="auth-method-note">使用微信账号快速绑定并登录。</p>
+          <button id="syncWechatLogin" class="button wechat-button" type="button">微信绑定 / 登录</button>
+        </div>
+        <div id="syncEmailPanel" class="auth-method-panel hidden" data-auth-panel="email">
+          <input id="syncEmail" type="email" autocomplete="email" placeholder="邮箱" aria-label="同步账号邮箱">
+          <input id="syncPassword" type="password" minlength="6" autocomplete="current-password" placeholder="密码（至少 6 位）" aria-label="同步账号密码">
+          <button id="syncLogin" class="button primary" type="button">登录</button>
+          <button id="syncSignup" class="button ghost" type="button">注册</button>
+        </div>
       </div>
       <div id="syncSignedIn" class="sync-account hidden">
         <span id="syncUserEmail"></span>
@@ -52,9 +69,20 @@
           <p class="muted">自动获取当前城市天气，每 30 分钟刷新一次。</p>
         </div>
         <div class="weather-controls">
-          <input id="weather-city-input" type="text" maxlength="80" placeholder="输入城市，例如 Hangzhou / Shanghai / Beijing" aria-label="天气城市">
+          <input id="weather-city-input" type="text" maxlength="80" placeholder="输入中文城市，例如杭州、上海、北京" aria-label="天气城市">
           <button id="save-weather-city-btn" class="button primary" type="button">保存城市</button>
           <button id="refresh-weather-btn" class="button ghost" type="button">刷新天气</button>
+        </div>
+        <div class="weather-popular-cities" aria-label="热门城市">
+          <span>热门：</span>
+          <button type="button" data-weather-city="北京">北京</button>
+          <button type="button" data-weather-city="上海">上海</button>
+          <button type="button" data-weather-city="杭州">杭州</button>
+          <button type="button" data-weather-city="南京">南京</button>
+          <button type="button" data-weather-city="广州">广州</button>
+          <button type="button" data-weather-city="深圳">深圳</button>
+          <button type="button" data-weather-city="成都">成都</button>
+          <button type="button" data-weather-city="武汉">武汉</button>
         </div>
         <div id="weather-loading" class="weather-loading hidden" role="status">天气更新中...</div>
         <div id="weather-error" class="weather-error hidden" role="alert"></div>
@@ -124,6 +152,20 @@
           <button class="button primary" type="submit">添加</button>
         </form>
         <div id="linkList" class="link-grid"></div>
+      </section>
+
+      <section class="card music-card" aria-labelledby="musicTitle">
+        <div class="card-heading">
+          <div><span class="section-kicker">MUSIC</span><h2 id="musicTitle">音乐</h2></div>
+        </div>
+        <p class="music-intro">选择常用音乐平台，一键打开后即可播放。</p>
+        <div class="music-platforms">
+          <a class="music-platform netease" href="https://music.163.com/" target="_blank" rel="noopener noreferrer"><span class="music-logo">云</span><span><strong>网易云音乐</strong><small>打开播放</small></span></a>
+          <a class="music-platform qqmusic" href="https://y.qq.com/" target="_blank" rel="noopener noreferrer"><span class="music-logo">Q</span><span><strong>QQ 音乐</strong><small>打开播放</small></span></a>
+          <a class="music-platform kugou" href="https://www.kugou.com/" target="_blank" rel="noopener noreferrer"><span class="music-logo">K</span><span><strong>酷狗音乐</strong><small>打开播放</small></span></a>
+          <a class="music-platform kuwo" href="https://www.kuwo.cn/" target="_blank" rel="noopener noreferrer"><span class="music-logo">酷</span><span><strong>酷我音乐</strong><small>打开播放</small></span></a>
+          <a class="music-platform migu" href="https://music.migu.cn/" target="_blank" rel="noopener noreferrer"><span class="music-logo">咪</span><span><strong>咪咕音乐</strong><small>打开播放</small></span></a>
+        </div>
       </section>
 
       <section class="card card-full" aria-labelledby="projectTitle">
