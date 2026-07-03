@@ -97,7 +97,7 @@
   let weatherVisibilityBound = false;
   let weatherEventsBound = false;
   let weatherRequestSequence = 0;
-  let musicSearchController = null;
+  let musicSearchRequestId = 0;
   let musicTracks = [];
   let currentMusicIndex = -1;
 
@@ -441,6 +441,51 @@
       </button>`).join('');
   }
 
+  function createMusicSearchUrl(term, callback = '') {
+    const url = new URL('https://itunes.apple.com/search');
+    url.searchParams.set('term', term);
+    url.searchParams.set('media', 'music');
+    url.searchParams.set('entity', 'song');
+    url.searchParams.set('country', 'CN');
+    url.searchParams.set('limit', '15');
+    if (callback) url.searchParams.set('callback', callback);
+    return url.toString();
+  }
+
+  async function fetchMusicSearch(term) {
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('音乐搜索请求超时')), 6000));
+    const request = fetch(createMusicSearchUrl(term)).then(response => {
+      if (!response.ok) throw new Error('音乐搜索服务暂时不可用');
+      return response.json();
+    });
+    return Promise.race([request, timeout]);
+  }
+
+  function fetchMusicSearchJsonp(term) {
+    return new Promise((resolve, reject) => {
+      const callback = `dashboardMusicCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const script = document.createElement('script');
+      let settled = false;
+      const cleanup = () => {
+        script.remove();
+        try { delete window[callback]; } catch { window[callback] = undefined; }
+      };
+      const finish = (handler, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        cleanup();
+        handler(value);
+      };
+      window[callback] = data => finish(resolve, data);
+      script.onerror = () => finish(reject, new Error('兼容搜索通道不可用'));
+      script.referrerPolicy = 'no-referrer';
+      script.src = createMusicSearchUrl(term, callback);
+      const timer = setTimeout(() => finish(reject, new Error('兼容搜索请求超时')), 9000);
+      document.head.append(script);
+    });
+  }
+
   async function searchMusic(query) {
     const term = String(query || '').trim();
     if (!term) {
@@ -448,20 +493,24 @@
       toast('请输入歌曲或歌手名称。', 'error');
       return;
     }
-    musicSearchController?.abort();
-    musicSearchController = new AbortController();
+    const requestId = ++musicSearchRequestId;
     $('#musicSearchButton').disabled = true;
     setMusicStatus('正在搜索歌曲…');
     try {
-      const url = new URL('https://itunes.apple.com/search');
-      url.searchParams.set('term', term);
-      url.searchParams.set('media', 'music');
-      url.searchParams.set('entity', 'song');
-      url.searchParams.set('country', 'CN');
-      url.searchParams.set('limit', '15');
-      const response = await fetch(url.toString(), { signal: musicSearchController.signal });
-      if (!response.ok) throw new Error('音乐搜索服务暂时不可用');
-      const data = await response.json();
+      let data;
+      const forceCompatibilityMode = new URLSearchParams(location.search).get('musicCompat') === '1';
+      if (forceCompatibilityMode) {
+        data = await fetchMusicSearchJsonp(term);
+      } else {
+        try {
+          data = await fetchMusicSearch(term);
+        } catch {
+          if (requestId !== musicSearchRequestId) return;
+          setMusicStatus('正在切换兼容搜索通道…');
+          data = await fetchMusicSearchJsonp(term);
+        }
+      }
+      if (requestId !== musicSearchRequestId) return;
       musicTracks = (Array.isArray(data.results) ? data.results : []).filter(track =>
         typeof track.previewUrl === 'string' && typeof track.trackName === 'string' && typeof track.artistName === 'string'
       );
@@ -469,13 +518,13 @@
       renderMusicResults();
       setMusicStatus(musicTracks.length ? `找到 ${musicTracks.length} 首可试听歌曲，点击即可播放。` : '没有找到可试听结果，请换个关键词。', !musicTracks.length);
     } catch (error) {
-      if (error?.name === 'AbortError') return;
+      if (requestId !== musicSearchRequestId) return;
       musicTracks = [];
       currentMusicIndex = -1;
       renderMusicResults();
       setMusicStatus('音乐搜索失败，请检查网络后重试。', true);
     } finally {
-      $('#musicSearchButton').disabled = false;
+      if (requestId === musicSearchRequestId) $('#musicSearchButton').disabled = false;
     }
   }
 
