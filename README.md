@@ -85,7 +85,7 @@ publishable/anon key 本来就用于浏览器公开使用，数据安全由 `sup
 - **习惯追踪**：点击复选框完成今天的打卡；每项同时显示本周（周一至周日）累计次数。可添加或删除习惯。打卡按具体日期保存，第二天会显示新的当日状态。
 - **重要日期**：填写事件名称、日期和可选备注。页面自动计算“还有 X 天”“就是今天”或“已过去 X 天”。
 - **快捷链接**：填写名称和 URL 后添加。没有输入 `http://` 或 `https://` 时会自动补上 `https://`。点击卡片会在新标签页打开。
-- **音乐点播**：音乐卡片位于天气右侧，收录网易云音乐与 QQ 音乐的 12 首精选歌曲。可按平台切换，或按歌名、歌手和心情标签即时搜索，也可以随机选择。选择歌曲后可通过按钮进入对应音乐平台的官方歌曲页；歌曲、音频、版权与登录规则均由平台提供，本站不保存音频文件。
+- **音乐点播**：Apple Music 使用官方 MusicKit Web 接入，完成下方配置后可授权订阅账号、搜索完整曲库、读取最近播放，并直接在仪表盘中播放。网易云精选歌曲会尝试加载官方外链播放器；QQ 音乐暂只保留官方歌曲页和合作接入说明。本站不保存音频文件、平台密码或 Apple 私钥。
 - **项目进度**：点击“新建项目”，填写名称、阶段、截止日期、进度和备注。卡片上的铅笔按钮用于编辑，`×` 用于删除。未完成且 3 天内截止的项目会显示黄色提醒样式。
 - **每日记录**：默认打开今天。输入后约半秒自动保存；通过日期选择器可以查看和编辑过去某天的记录。
 - **今日总结**：自动汇总今日待办、习惯、临近截止项目和 Daily Note 情况，并给出一句轻量评价。
@@ -102,6 +102,26 @@ publishable/anon key 本来就用于浏览器公开使用，数据安全由 `sup
 - `dashboardWeatherUpdatedAt`：保存最近更新时间。
 
 天气模块使用 [Open-Meteo](https://open-meteo.com/) 的 Geocoding API 和 Forecast API，不需要 API Key。城市和天气缓存只保存在浏览器 localStorage；断网或请求失败时会优先展示上一次缓存。
+
+## Apple Music 官方接入
+
+音乐模块的网页播放器已经接好，但完整播放需要 Apple Developer Program 账号、MusicKit 标识和对应私钥。用户本人还需要有效的 Apple Music 订阅。
+
+1. 在 Apple Developer 的 **Certificates, Identifiers & Profiles** 中创建 MusicKit/Media Services 标识和私钥，记录 Team ID 与 Key ID，并下载一次性的 `.p8` 私钥。
+2. 在 Supabase 项目的 Edge Function Secrets 中配置：
+   - `APPLE_MUSIC_TEAM_ID`：Apple Team ID
+   - `APPLE_MUSIC_KEY_ID`：MusicKit Key ID
+   - `APPLE_MUSIC_PRIVATE_KEY`：`.p8` 文件的完整内容
+   - `APPLE_MUSIC_ALLOWED_ORIGINS`：`https://17376581022-netizen.github.io,http://127.0.0.1:8000,http://localhost:8000`
+3. 部署 `supabase/functions/apple-music-token`。该函数已关闭 Supabase 用户 JWT 校验，并只为允许的网站来源签发 12 小时的 Apple Developer Token。
+4. 保持 `apple-music-config.js` 中的令牌地址指向部署后的函数，然后刷新网页。
+
+`.p8` 私钥只能放在 Supabase Secrets 中。不要粘贴到 `apple-music-config.js`、聊天记录或 GitHub 仓库。前端只会收到短期签名令牌，Apple Music 的用户授权由官方 MusicKit 页面处理。
+
+### QQ 音乐与网易云音乐
+
+- 网易云音乐：当前使用 `music.163.com/outchain/player` 官方域名的外链播放器尝试站内播放。它不提供会员登录、完整曲库搜索或稳定的商业 API 保证，歌曲能否播放由版权区域和网易云外链策略决定。
+- QQ 音乐：没有在普通网页中启用逆向扫码登录、Cookie 抓取或非官方播放地址。完整的搜索、授权和会员播放能力需要腾讯连连/IoT 或商务合作资质，取得正式权限后再接入。
 
 建议偶尔使用页面顶部的 `Export Data` 下载备份。天气城市和缓存也会包含在备份中；恢复操作只会写入本工具已知的数据键，不会覆盖其他网页的数据。
 
