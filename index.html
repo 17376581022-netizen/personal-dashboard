@@ -76,27 +76,32 @@
 
       <section class="music-section" aria-labelledby="musicTitle">
         <div class="music-section-header">
-          <div><span class="section-kicker">NOW PLAYING</span><h2 id="musicTitle">音乐点播</h2></div>
-          <span class="music-source">500 首原创生成式 R&amp;B</span>
+          <div><span class="section-kicker">MUSIC STATION</span><h2 id="musicTitle">音乐点播</h2></div>
+          <span class="music-source"><i aria-hidden="true"></i> 网易云音乐 · QQ音乐</span>
+        </div>
+        <div id="musicPlatformTabs" class="music-platform-tabs" aria-label="音乐平台筛选">
+          <button class="active" type="button" data-music-platform="all" aria-pressed="true">全部</button>
+          <button type="button" data-music-platform="netease" aria-pressed="false"><span class="platform-dot netease"></span>网易云</button>
+          <button type="button" data-music-platform="qq" aria-pressed="false"><span class="platform-dot qq"></span>QQ音乐</button>
         </div>
         <form id="musicSearchForm" class="music-search-form">
-          <label class="sr-only" for="musicSearchInput">筛选曲名或风格</label>
-          <input id="musicSearchInput" maxlength="80" autocomplete="off" placeholder="筛选曲名、编号或风格">
-          <button id="musicSearchButton" class="button primary" type="submit">筛选</button>
+          <label class="sr-only" for="musicSearchInput">搜索歌曲或歌手</label>
+          <input id="musicSearchInput" maxlength="80" autocomplete="off" placeholder="搜索歌曲、歌手或心情标签">
+          <button id="musicSearchButton" class="button primary" type="submit">搜索</button>
         </form>
-        <p id="musicStatus" class="music-status" role="status">500 首本地 R&amp;B 曲目已就绪，点击任意曲目开始循环播放。</p>
+        <p id="musicStatus" class="music-status" role="status">12 首平台精选已就绪，选择歌曲后前往官方平台收听。</p>
         <div id="musicNowPlaying" class="music-now-playing empty">
-          <div class="music-disc" aria-hidden="true">♪</div>
-          <div><strong>尚未播放</strong><span>浏览器实时生成 · 无外部音乐平台</span></div>
+          <div class="music-disc" aria-hidden="true"><span>♪</span></div>
+          <div class="music-now-copy"><span class="music-overline">READY TO PLAY</span><strong>今天想听哪一首？</strong><span>从下方精选曲目中选择</span></div>
         </div>
+        <div id="musicEmbed" class="music-embed hidden" aria-live="polite"></div>
         <div class="music-player-controls">
-          <button id="musicToggleButton" class="button ghost" type="button" disabled>播放 / 暂停</button>
-          <button id="musicRandomButton" class="button ghost" type="button">随机播放</button>
-          <button id="musicShowAllButton" class="button ghost" type="button">显示全部</button>
-          <span id="musicLoopBadge" class="music-loop-badge">自动循环</span>
+          <button id="musicRandomButton" class="button secondary" type="button">↝ 随机选一首</button>
+          <button id="musicShowAllButton" class="button ghost" type="button">清除筛选</button>
+          <a id="musicOpenButton" class="button music-open-button hidden" href="#" target="_blank" rel="noopener noreferrer">在音乐平台打开 ↗</a>
         </div>
         <div id="musicResults" class="music-results" aria-live="polite"></div>
-        <p class="music-notice">音乐由 Web Audio 在本机实时合成，不下载、不跳转、不调用第三方曲库；可用于本仪表盘背景播放。</p>
+        <p class="music-notice">歌曲与播放服务由对应音乐平台提供，版权及登录规则以平台页面为准。本站不存储音频文件。</p>
       </section>
 
     </section>
