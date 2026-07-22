@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="一个离线可用、数据保存在浏览器本地的个人生活仪表盘。">
   <title>Personal Dashboard</title>
+  <link rel="stylesheet" href="vendor/aplayer/APlayer.min.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -77,52 +78,58 @@
       <section class="music-section" aria-labelledby="musicTitle">
         <div class="music-section-header">
           <div><span class="section-kicker">MUSIC STATION</span><h2 id="musicTitle">音乐点播</h2></div>
-          <span class="music-source"><i aria-hidden="true"></i> Apple Music 优先接入</span>
+          <span class="music-source"><i aria-hidden="true"></i> 网易云 · QQ音乐 · 酷狗 聚合播放</span>
         </div>
-        <div id="musicPlatformTabs" class="music-platform-tabs" aria-label="音乐平台筛选">
-          <button class="active" type="button" data-music-platform="apple" aria-pressed="true"><span class="platform-dot apple"></span>Apple Music</button>
-          <button type="button" data-music-platform="netease" aria-pressed="false"><span class="platform-dot netease"></span>网易云外链</button>
+        <div id="musicPlatformTabs" class="music-platform-tabs" aria-label="音乐平台切换">
+          <button class="active" type="button" data-music-platform="netease" aria-pressed="true"><span class="platform-dot netease"></span>网易云音乐</button>
           <button type="button" data-music-platform="qq" aria-pressed="false"><span class="platform-dot qq"></span>QQ音乐</button>
+          <button type="button" data-music-platform="kugou" aria-pressed="false"><span class="platform-dot kugou"></span>酷狗音乐</button>
+          <button type="button" data-music-platform="apple" aria-pressed="false"><span class="platform-dot apple"></span>Apple Music</button>
         </div>
-        <div id="appleMusicAccount" class="apple-music-account">
-          <div>
-            <span class="apple-music-label">APPLE MUSIC ACCOUNT</span>
-            <strong id="appleMusicAccountTitle">正在连接 Apple Music…</strong>
-            <span id="appleMusicAccountDetail">连接后可搜索曲库，并在此处直接播放。</span>
+        <div id="appleMusicPanel" class="hidden">
+          <div id="appleMusicAccount" class="apple-music-account">
+            <div>
+              <span class="apple-music-label">APPLE MUSIC ACCOUNT</span>
+              <strong id="appleMusicAccountTitle">正在连接 Apple Music…</strong>
+              <span id="appleMusicAccountDetail">连接后可搜索曲库，并在此处直接播放。</span>
+            </div>
+            <div class="apple-music-account-actions">
+              <button id="appleMusicConnectButton" class="button apple-connect" type="button" disabled>连接 Apple Music</button>
+              <button id="appleMusicLibraryButton" class="button ghost hidden" type="button">最近播放</button>
+              <button id="appleMusicLogoutButton" class="button ghost hidden" type="button">断开</button>
+            </div>
           </div>
-          <div class="apple-music-account-actions">
-            <button id="appleMusicConnectButton" class="button apple-connect" type="button" disabled>连接 Apple Music</button>
-            <button id="appleMusicLibraryButton" class="button ghost hidden" type="button">最近播放</button>
-            <button id="appleMusicLogoutButton" class="button ghost hidden" type="button">断开</button>
+          <div id="applePlaybackProgress" class="apple-playback-progress hidden">
+            <span id="applePlaybackCurrent">0:00</span>
+            <input id="applePlaybackSeek" type="range" min="0" max="1000" value="0" aria-label="播放进度">
+            <span id="applePlaybackDuration">0:00</span>
           </div>
         </div>
-        <div id="musicProviderNotice" class="music-provider-notice hidden" role="note"></div>
+        <p id="musicProviderNotice" class="music-provider-notice" role="note"></p>
         <form id="musicSearchForm" class="music-search-form">
           <label class="sr-only" for="musicSearchInput">搜索歌曲或歌手</label>
-          <input id="musicSearchInput" maxlength="80" autocomplete="off" placeholder="在 Apple Music 搜索歌曲或歌手">
+          <input id="musicSearchInput" maxlength="80" autocomplete="off" placeholder="在网易云音乐搜索歌曲或歌手">
           <button id="musicSearchButton" class="button primary" type="submit">搜索</button>
         </form>
-        <p id="musicStatus" class="music-status" role="status">正在准备 Apple Music 官方播放器…</p>
-        <div id="musicNowPlaying" class="music-now-playing empty">
+        <p id="musicStatus" class="music-status" role="status">正在载入你的网易云歌单…</p>
+        <div id="metingPlayerWrap" class="meting-player-wrap">
+          <div id="dashboardAPlayer"></div>
+        </div>
+        <div id="musicNowPlaying" class="music-now-playing empty hidden">
           <div class="music-disc" aria-hidden="true"><span>♪</span></div>
-          <div class="music-now-copy"><span class="music-overline">READY TO PLAY</span><strong>连接 Apple Music 后开始点歌</strong><span>播放过程会留在当前页面</span></div>
+          <div class="music-now-copy"><span class="music-overline">READY TO PLAY</span><strong>选择歌曲后开始播放</strong><span>播放过程会留在当前页面</span></div>
         </div>
         <div id="musicEmbed" class="music-embed hidden" aria-live="polite"></div>
-        <div id="applePlaybackProgress" class="apple-playback-progress hidden">
-          <span id="applePlaybackCurrent">0:00</span>
-          <input id="applePlaybackSeek" type="range" min="0" max="1000" value="0" aria-label="播放进度">
-          <span id="applePlaybackDuration">0:00</span>
-        </div>
         <div class="music-player-controls">
           <button id="applePreviousButton" class="button ghost apple-player-button hidden" type="button" aria-label="上一首">上一首</button>
           <button id="applePlayPauseButton" class="button apple-connect apple-player-button hidden" type="button">播放</button>
           <button id="appleNextButton" class="button ghost apple-player-button hidden" type="button" aria-label="下一首">下一首</button>
           <button id="musicRandomButton" class="button secondary" type="button">↝ 随机选一首</button>
-          <button id="musicShowAllButton" class="button ghost" type="button">返回精选</button>
+          <button id="musicShowAllButton" class="button ghost" type="button">返回我的歌单</button>
           <a id="musicOpenButton" class="button music-open-button hidden" href="#" target="_blank" rel="noopener noreferrer">在音乐平台打开 ↗</a>
         </div>
         <div id="musicResults" class="music-results" aria-live="polite"></div>
-        <p class="music-notice">Apple Music 通过官方 MusicKit 播放；完整歌曲需要有效订阅。网易云仅尝试官方外链播放器，QQ 音乐暂保留官方页面与合作接入路径。本站不存储音频文件或平台密码。</p>
+        <p class="music-notice">网易云音乐 / QQ音乐 / 酷狗通过 Meting 公共接口聚合搜索与在线播放；接口异常时网易云自动降级为官方外链播放器。Apple Music 仍通过官方 MusicKit 播放，完整歌曲需要有效订阅。本站不存储音频文件或平台密码。</p>
       </section>
 
     </section>
@@ -238,6 +245,9 @@
   </div>
 
   <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <script src="vendor/aplayer/APlayer.min.js"></script>
+  <script src="music-config.js"></script>
+  <script src="music-playlist-fallback.js"></script>
   <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" data-web-components async></script>
   <script src="apple-music-config.js"></script>
   <script src="app.js"></script>

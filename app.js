@@ -99,12 +99,17 @@
   let weatherRequestSequence = 0;
   let musicTracks = [];
   let visibleMusicTracks = [];
-  let currentMusicIndex = -1;
-  let activeMusicPlatform = 'apple';
+  let currentMusicId = null;
+  let activeMusicPlatform = 'netease';
   let appleMusic = null;
   let appleMusicReady = false;
   let appleMusicConfigured = false;
   let applePlaybackTimer = null;
+  let aplayer = null;
+  let metingOnline = true;
+  let playlistTracks = [];
+  let quickPickTracks = [];
+  const trackStore = new Map();
 
   // Persist first-run defaults immediately so deleting all items remains intentional.
   if (!localStorage.getItem(STORAGE.habits)) write(STORAGE.habits, habits);
@@ -495,60 +500,254 @@
     startWeatherAutoRefresh();
   }
 
+  /* ---------------- 音乐点播：聚合播放（网易云 / QQ音乐 / 酷狗）+ Apple Music ---------------- */
+
+  const METING_PLATFORMS = {
+    netease: {
+      server: 'netease', label: '网易云音乐', color: '#e4473e',
+      originUrl: id => `https://music.163.com/#/song?id=${id}`
+    },
+    qq: {
+      server: 'tencent', label: 'QQ音乐', color: '#35c682',
+      originUrl: id => `https://y.qq.com/n/ryqq/songDetail/${id}`
+    },
+    kugou: {
+      server: 'kugou', label: '酷狗音乐', color: '#4aa3ff',
+      originUrl: () => ''
+    }
+  };
+  const RANDOM_SEARCH_WORDS = ['热歌', '流行金曲', '周杰伦', '林俊杰', '陈奕迅', '民谣', '摇滚', '邓紫棋', '治愈系', '经典老歌'];
+
+  function musicConfig() { return window.DASHBOARD_MUSIC_CONFIG || {}; }
+  function metingApiBase() {
+    return String(musicConfig().metingApi || 'https://api.i-meto.com/meting/api').replace(/\/+$/, '');
+  }
+  function playlistName() { return String(musicConfig().neteasePlaylistName || '我的歌单'); }
+
   function setMusicStatus(message, isError = false) {
     const status = $('#musicStatus');
     status.textContent = message;
     status.classList.toggle('error', isError);
   }
 
-  function createMusicCatalog() {
-    const netease = (id, trackName, artistName, mood, color) => ({
-      id: `netease-${id}`, platform: 'netease', platformName: '网易云音乐', trackName, artistName, mood, color,
-      url: `https://music.163.com/#/song?id=${id}`
-    });
-    const qq = (slug, trackName, artistName, mood, color, songMid = '') => ({
-      id: `qq-${slug}`, platform: 'qq', platformName: 'QQ音乐', trackName, artistName, mood, color,
-      url: songMid
-        ? `https://y.qq.com/n/ryqq/songDetail/${songMid}`
-        : `https://y.qq.com/n/ryqq/search?w=${encodeURIComponent(`${trackName} ${artistName}`)}&t=song`
-    });
-    return [
-      netease('1330348068', '起风了', '买辣椒也用券', '通勤 · 自由', '#d85b53'),
-      netease('513360721', '云烟成雨', '房东的猫', '雨天 · 民谣', '#597ba4'),
-      netease('436514312', '成都', '赵雷', '夜晚 · 城市', '#b8794b'),
-      netease('569213220', '像我这样的人', '毛不易', '独处 · 慢歌', '#80689b'),
-      netease('30431367', '易燃易爆炸', '陈粒', '深夜 · 情绪', '#a84d64'),
-      netease('38576323', '春风十里', '鹿先森乐队', '公路 · 清新', '#578b76'),
-      qq('sunny-day', '晴天', '周杰伦', '青春 · 经典', '#55a7c2', '0039MnYb0qxYhV'),
-      qq('practice-love', '修炼爱情', '林俊杰', '回忆 · 情歌', '#596dc0'),
-      qq('young-and-promising', '年少有为', '李荣浩', '成长 · 人生', '#60778f'),
-      qq('as-wished', '如愿', '王菲', '温暖 · 电影', '#a66f8f'),
-      qq('so-many-people', '这世界那么多人', '莫文蔚', '黄昏 · 治愈', '#9a7355'),
-      qq('light-years-away', '光年之外', 'G.E.M. 邓紫棋', '星空 · 力量', '#6d5fa8')
-    ];
+  async function metingFetch({ server, type, id }) {
+    const url = `${metingApiBase()}?server=${encodeURIComponent(server)}&type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+      if (!response.ok) throw new Error(`Meting 接口返回 ${response.status}`);
+      return await response.json();
+    } finally { clearTimeout(timer); }
   }
 
-  function appleArtworkUrl(artwork, size = 96) {
-    const template = artwork?.url;
-    if (!template) return '';
-    return template.replace('{w}', String(size)).replace('{h}', String(size)).replace('{f}', 'jpg');
+  function registerTrack(track) { trackStore.set(track.id, track); return track; }
+
+  function metingTrackFromApi(item, platform) {
+    const conf = METING_PLATFORMS[platform];
+    const idMatch = /[?&]id=([^&]+)/.exec(item?.url || '');
+    const remoteId = idMatch ? idMatch[1] : '';
+    return registerTrack({
+      id: `${platform}-${remoteId || uid()}`,
+      platform,
+      platformName: conf.label,
+      trackName: item?.title || '未知歌曲',
+      artistName: item?.author || '未知歌手',
+      color: conf.color,
+      url: item?.url || '',
+      pic: item?.pic || '',
+      lrc: item?.lrc || '',
+      remoteId,
+      originUrl: remoteId ? conf.originUrl(remoteId) : ''
+    });
   }
 
-  function appleResourceToTrack(resource) {
-    const attributes = resource?.attributes || {};
-    const color = attributes.artwork?.bgColor ? `#${attributes.artwork.bgColor}` : '#fa2d48';
-    return {
-      id: `apple-${resource.id}`,
-      appleId: resource.id,
-      platform: 'apple',
-      platformName: 'Apple Music',
-      trackName: attributes.name || '未知歌曲',
-      artistName: attributes.artistName || '未知歌手',
-      mood: attributes.albumName || attributes.genreNames?.[0] || 'Apple Music',
-      color,
-      artwork: appleArtworkUrl(attributes.artwork, 160),
-      url: attributes.url || `https://music.apple.com/cn/song/${resource.id}`
+  function trackToAplayerAudio(track) {
+    const audio = {
+      name: track.trackName,
+      artist: track.artistName,
+      url: track.url,
+      cover: track.pic,
+      lrc: track.lrc,
+      originUrl: track.originUrl || '',
+      platform: track.platform,
+      platformName: track.platformName
     };
+    // 非网易云平台音源失败时，自动尝试网易云同名歌曲代播
+    if (track.platform !== 'netease') {
+      audio.fallbackTitle = track.trackName;
+      audio.fallbackArtist = track.artistName;
+      audio.fallbackPlatform = track.platformName;
+    }
+    return audio;
+  }
+
+  async function substituteWithNetease(audio, failedIndex) {
+    const player = ensureAplayer();
+    if (!player || !audio?.fallbackTitle || audio.fallbackTried) return;
+    audio.fallbackTried = true;
+    const query = `${audio.fallbackTitle} ${audio.fallbackArtist || ''}`.trim();
+    setMusicStatus(`${audio.fallbackPlatform}音源受限，正在网易云寻找《${audio.fallbackTitle}》代播…`);
+    try {
+      const data = await metingFetch({ server: 'netease', type: 'search', id: query });
+      const candidates = (Array.isArray(data) ? data : []).map(item => metingTrackFromApi(item, 'netease')).filter(track => track.url);
+      if (!candidates.length) {
+        setMusicStatus(`《${audio.fallbackTitle}》在${audio.fallbackPlatform}和网易云都暂时无法播放，换一首试试。`, true);
+        return;
+      }
+      const normalize = value => String(value || '').replace(/\s+/g, '').toLocaleLowerCase('zh-CN');
+      const titleKey = normalize(audio.fallbackTitle);
+      const best = candidates.find(track => normalize(track.trackName).includes(titleKey) || titleKey.includes(normalize(track.trackName))) || candidates[0];
+      player.list.add(trackToAplayerAudio(best));
+      // 删除失败的那一条，保持列表干净
+      if (Number.isInteger(failedIndex) && player.list.audios[failedIndex] === audio) player.list.remove(failedIndex);
+      player.list.switch(player.list.audios.length - 1);
+      player.play();
+      setMusicStatus(`${audio.fallbackPlatform}暂不可播，已切换网易云音源播放《${best.trackName}》 · ${best.artistName}。`);
+    } catch (error) {
+      console.warn('Netease substitute failed', error);
+      setMusicStatus('这首歌暂时无法播放，可能是版权限制或接口繁忙，换一首试试。', true);
+    }
+  }
+
+  function updateMusicOpenButton(track) {
+    const button = $('#musicOpenButton');
+    if (track?.originUrl) {
+      button.href = track.originUrl;
+      button.textContent = `在 ${track.platformName} 打开 ↗`;
+      button.className = `button music-open-button ${track.platform}`;
+    } else {
+      button.className = 'button music-open-button hidden';
+    }
+  }
+
+  function pauseApplePlayback() {
+    try { if (appleMusic?.isPlaying) appleMusic.pause(); } catch { /* 忽略暂停失败 */ }
+  }
+
+  function ensureAplayer() {
+    if (aplayer || !window.APlayer) return aplayer;
+    aplayer = new window.APlayer({
+      container: $('#dashboardAPlayer'),
+      audio: [],
+      lrcType: 3,
+      listFolded: false,
+      listMaxHeight: '240px',
+      autoplay: false,
+      preload: 'none',
+      theme: '#66d6a7',
+      volume: 0.7
+    });
+    aplayer.on('play', () => {
+      pauseApplePlayback();
+      const audio = aplayer.list.audios[aplayer.list.index];
+      if (!audio) return;
+      setMusicStatus(`正在播放《${audio.name}》 · ${audio.artist}${audio.platformName ? ` · ${audio.platformName}` : ''}`);
+      updateMusicOpenButton(audio);
+      const matched = [...trackStore.values()].find(track => track.url && track.url === audio.url);
+      currentMusicId = matched ? matched.id : null;
+      renderMusicResults();
+    });
+    aplayer.on('error', () => {
+      const index = aplayer.list.index;
+      const audio = aplayer.list.audios[index];
+      if (audio?.fallbackTitle && !audio.fallbackTried) {
+        substituteWithNetease(audio, index);
+        return;
+      }
+      setMusicStatus('这首歌暂时无法播放，可能是版权限制或接口繁忙，换一首试试。', true);
+    });
+    return aplayer;
+  }
+
+  function playMetingTrack(track) {
+    const player = ensureAplayer();
+    if (!player) { setMusicStatus('播放器组件未加载成功，请刷新页面重试。', true); return; }
+    pauseApplePlayback();
+    let index = player.list.audios.findIndex(audio => audio.url === track.url);
+    if (index === -1) {
+      player.list.add(trackToAplayerAudio(track));
+      index = player.list.audios.length - 1;
+    }
+    player.list.switch(index);
+    player.play();
+    currentMusicId = track.id;
+    updateMusicOpenButton(track);
+    renderMusicResults();
+  }
+
+  async function loadNeteasePlaylist({ silent = false } = {}) {
+    const playlistId = String(musicConfig().neteasePlaylistId || '').trim();
+    if (!playlistId) { enterMusicFallback('未配置网易云歌单 ID，当前展示离线歌单快照。'); return; }
+    if (!silent) setMusicStatus(`正在载入「${playlistName()}」…`);
+    try {
+      const data = await metingFetch({ server: 'netease', type: 'playlist', id: playlistId });
+      const tracks = (Array.isArray(data) ? data : []).map(item => metingTrackFromApi(item, 'netease')).filter(track => track.url);
+      if (!tracks.length) throw new Error('playlist empty');
+      metingOnline = true;
+      playlistTracks = tracks;
+      quickPickTracks = tracks.slice(0, 12);
+      const player = ensureAplayer();
+      if (player) {
+        player.list.clear();
+        player.list.add(playlistTracks.map(trackToAplayerAudio));
+      }
+      if (activeMusicPlatform === 'netease') {
+        $('#metingPlayerWrap').classList.remove('hidden');
+        $('#musicNowPlaying').classList.add('hidden');
+        visibleMusicTracks = quickPickTracks;
+        renderMusicResults();
+        setMusicStatus(`「${playlistName()}」 · ${tracks.length} 首已就绪，播放器下方可展开完整歌单；也可直接搜索全曲库。`);
+      }
+    } catch (error) {
+      console.warn('Meting playlist load failed', error);
+      enterMusicFallback('歌单接口暂时不可用，已切换为离线歌单快照（网易云官方外链播放）。');
+    }
+  }
+
+  function fallbackCatalog() {
+    const snapshot = Array.isArray(window.MUSIC_PLAYLIST_FALLBACK) ? window.MUSIC_PLAYLIST_FALLBACK : [];
+    return snapshot.map(item => registerTrack({
+      id: `netease-${item.id}`,
+      platform: 'netease',
+      platformName: '网易云音乐',
+      trackName: item.name,
+      artistName: item.artist,
+      mood: playlistName(),
+      color: '#e4473e',
+      url: `https://music.163.com/#/song?id=${item.id}`,
+      remoteId: String(item.id),
+      offline: true
+    }));
+  }
+
+  function enterMusicFallback(message) {
+    metingOnline = false;
+    if (activeMusicPlatform !== 'netease') { setMusicStatus(message, true); return; }
+    musicTracks = [...musicTracks.filter(track => track.platform === 'apple'), ...fallbackCatalog()];
+    $('#metingPlayerWrap').classList.add('hidden');
+    $('#musicNowPlaying').classList.remove('hidden');
+    filterMusic('');
+    setMusicStatus(message, true);
+  }
+
+  async function searchMetingMusic(platform, term) {
+    const conf = METING_PLATFORMS[platform];
+    const query = String(term || '').trim();
+    if (!query) { setMusicStatus('请输入歌曲名或歌手名。', true); return; }
+    setMusicStatus(`正在${conf.label}搜索“${query}”…`);
+    try {
+      const data = await metingFetch({ server: conf.server, type: 'search', id: query });
+      const tracks = (Array.isArray(data) ? data : []).map(item => metingTrackFromApi(item, platform)).filter(track => track.url);
+      visibleMusicTracks = tracks;
+      renderMusicResults();
+      setMusicStatus(tracks.length
+        ? `${conf.label} · 找到 ${tracks.length} 首，点击即可播放。`
+        : `${conf.label}没有找到匹配歌曲，换个关键词试试。`, !tracks.length);
+    } catch (error) {
+      console.warn('Meting search failed', error);
+      setMusicStatus(`${conf.label}搜索失败，接口可能暂时繁忙，请稍后重试。`, true);
+    }
   }
 
   function musicPlatformLabel(track) {
@@ -558,36 +757,37 @@
   function renderMusicResults() {
     const container = $('#musicResults');
     if (!visibleMusicTracks.length) {
-      container.innerHTML = activeMusicPlatform === 'apple'
-        ? '<p class="music-empty">完成 Apple 开发者令牌配置后，这里会显示官方搜索结果。</p>'
-        : '<p class="music-empty">没有匹配的曲目，换个关键词试试。</p>';
+      let message = '没有匹配的曲目，换个关键词试试。';
+      if (activeMusicPlatform === 'apple') message = '完成 Apple 开发者令牌配置后，这里会显示官方搜索结果。';
+      else if (activeMusicPlatform !== 'netease') message = `输入歌手或歌名，开始搜索${METING_PLATFORMS[activeMusicPlatform].label}曲库。`;
+      container.innerHTML = `<p class="music-empty">${message}</p>`;
       return;
     }
-    container.innerHTML = visibleMusicTracks.map(track => {
-      const index = musicTracks.findIndex(item => item.id === track.id);
-      const resultMark = track.artwork
-        ? `<img src="${esc(track.artwork)}" alt="" loading="lazy">`
-        : String(index + 1).padStart(2, '0');
+    container.innerHTML = visibleMusicTracks.map((track, position) => {
+      const cover = track.pic || track.artwork || '';
+      const resultMark = cover
+        ? `<img src="${esc(cover)}" alt="" loading="lazy">`
+        : String(position + 1).padStart(2, '0');
+      const subtitle = track.mood ? `${esc(track.artistName)} · ${esc(track.mood)}` : esc(track.artistName);
       return `
-      <button class="music-result${index === currentMusicIndex ? ' active' : ''}" type="button" data-music-index="${index}" aria-label="选择 ${esc(track.trackName)}，${esc(track.artistName)}，${esc(track.platformName)}">
-        <span class="music-result-mark ${track.platform}" style="--track-color:${esc(track.color)}" aria-hidden="true">${resultMark}</span>
-        <span class="music-result-copy"><strong>${esc(track.trackName)}</strong><span>${esc(track.artistName)} · ${esc(track.mood)}</span></span>
+      <button class="music-result${track.id === currentMusicId ? ' active' : ''}" type="button" data-music-id="${esc(track.id)}" aria-label="播放 ${esc(track.trackName)}，${esc(track.artistName)}，${esc(track.platformName)}">
+        <span class="music-result-mark ${track.platform}" style="--track-color:${esc(track.color || '#66d6a7')}" aria-hidden="true">${resultMark}</span>
+        <span class="music-result-copy"><strong>${esc(track.trackName)}</strong><span>${subtitle}</span></span>
         ${musicPlatformLabel(track)}
       </button>`;
     }).join('');
   }
 
   function filterMusic(query = $('#musicSearchInput').value) {
-    if (activeMusicPlatform === 'apple') return;
     const term = String(query || '').trim().toLocaleLowerCase('zh-CN');
-    visibleMusicTracks = musicTracks.filter(track => {
-      const matchesPlatform = track.platform === activeMusicPlatform;
-      const matchesTerm = !term || `${track.trackName} ${track.artistName} ${track.mood} ${track.platformName}`.toLocaleLowerCase('zh-CN').includes(term);
-      return matchesPlatform && matchesTerm;
-    });
+    const pool = musicTracks.filter(track => track.platform === 'netease' && track.offline);
+    visibleMusicTracks = pool
+      .filter(track => !term || `${track.trackName} ${track.artistName}`.toLocaleLowerCase('zh-CN').includes(term))
+      .slice(0, 60);
     renderMusicResults();
-    const platformName = activeMusicPlatform === 'netease' ? '网易云外链' : 'QQ音乐';
-    setMusicStatus(visibleMusicTracks.length ? `${platformName} · 找到 ${visibleMusicTracks.length} 首精选。` : '没有匹配的歌曲，换个关键词试试。', !visibleMusicTracks.length);
+    setMusicStatus(visibleMusicTracks.length
+      ? `离线歌单 · 匹配 ${visibleMusicTracks.length} 首${term ? '' : '，输入关键词可筛选'}。`
+      : '没有匹配的歌曲，换个关键词试试。', !visibleMusicTracks.length);
   }
 
   function resetMusicEmbed() {
@@ -600,22 +800,23 @@
     const artwork = track.artwork
       ? `<div class="music-disc" style="background-image:url('${esc(track.artwork)}');background-size:cover;background-position:center" aria-hidden="true"><span>♪</span></div>`
       : '<div class="music-disc" aria-hidden="true"><span>♪</span></div>';
-    $('#musicNowPlaying').className = `music-now-playing selected ${track.platform}`;
-    $('#musicNowPlaying').style.setProperty('--track-color', track.color);
-    $('#musicNowPlaying').innerHTML = `
+    const nowPlaying = $('#musicNowPlaying');
+    nowPlaying.className = `music-now-playing selected ${track.platform}`;
+    nowPlaying.style.setProperty('--track-color', track.color);
+    nowPlaying.innerHTML = `
       ${artwork}
-      <div class="music-now-copy"><span class="music-overline">${esc(overline)}</span><strong>${esc(track.trackName)}</strong><span>${esc(track.artistName)} · ${esc(track.mood)}</span></div>
+      <div class="music-now-copy"><span class="music-overline">${esc(overline)}</span><strong>${esc(track.trackName)}</strong><span>${esc(track.artistName)}${track.mood ? ` · ${esc(track.mood)}` : ''}</span></div>
       ${musicPlatformLabel(track)}`;
   }
 
-  async function playAppleTrack(index) {
-    const track = musicTracks[index];
+  async function playAppleTrack(track) {
     if (!track || track.platform !== 'apple') return;
     if (!appleMusicReady || !appleMusic) {
       setMusicStatus('Apple Music 尚未完成配置，请先连接官方服务。', true);
       return;
     }
-    currentMusicIndex = index;
+    currentMusicId = track.id;
+    if (aplayer) aplayer.pause();
     setNowPlaying(track, appleMusic.isAuthorized ? 'NOW PLAYING · APPLE MUSIC' : 'PREVIEW · APPLE MUSIC');
     resetMusicEmbed();
     $('#musicOpenButton').className = 'button music-open-button hidden';
@@ -635,29 +836,22 @@
     renderMusicResults();
   }
 
-  function selectExternalMusic(index) {
-    const track = musicTracks[index];
-    if (!track || track.platform === 'apple') return;
-    currentMusicIndex = index;
+  function selectExternalMusic(track) {
+    if (!track || track.platform !== 'netease') return;
+    currentMusicId = track.id;
+    if (aplayer) aplayer.pause();
     setNowPlaying(track);
     const embed = $('#musicEmbed');
     const openButton = $('#musicOpenButton');
     openButton.href = track.url;
     openButton.textContent = `在 ${track.platformName} 打开 ↗`;
-    openButton.className = `button music-open-button ${track.platform}`;
-    if (track.platform === 'netease') {
-      const songId = track.id.replace('netease-', '');
-      embed.className = 'music-embed';
-      embed.innerHTML = `<iframe title="网易云音乐播放《${esc(track.trackName)}》" loading="lazy" allow="autoplay" referrerpolicy="strict-origin-when-cross-origin" src="https://music.163.com/outchain/player?type=2&id=${encodeURIComponent(songId)}&auto=0&height=66"></iframe>`;
-      setMusicStatus(`已载入网易云官方外链播放器；若歌曲因版权不可用，可打开官方歌曲页。`);
-    } else {
-      embed.className = `music-embed music-external-hint ${track.platform}`;
-      embed.innerHTML = `<span class="external-hint-icon" aria-hidden="true">↗</span><div><strong>QQ 音乐暂未向普通网页开放完整播放 SDK</strong><span>当前保留官方歌曲页；不会使用逆向扫码登录或抓取播放地址。</span></div>`;
-      setMusicStatus(`已选择《${track.trackName}》，当前仅能通过 QQ 音乐官方页面收听。`);
-    }
+    openButton.className = 'button music-open-button netease';
+    const songId = track.remoteId || track.id.replace('netease-', '');
+    embed.className = 'music-embed';
+    embed.innerHTML = `<iframe title="网易云音乐播放《${esc(track.trackName)}》" loading="lazy" allow="autoplay" referrerpolicy="strict-origin-when-cross-origin" src="https://music.163.com/outchain/player?type=2&id=${encodeURIComponent(songId)}&auto=0&height=66"></iframe>`;
+    setMusicStatus('已载入网易云官方外链播放器；若歌曲因版权不可用，可打开官方歌曲页。');
     renderMusicResults();
   }
-
   function formatPlaybackTime(seconds) {
     const value = Number.isFinite(Number(seconds)) ? Math.max(0, Math.floor(Number(seconds))) : 0;
     return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
@@ -723,6 +917,29 @@
     return Array.isArray(value?.data) ? value.data : Array.isArray(value) ? value : [];
   }
 
+  function appleArtworkUrl(artwork, size = 96) {
+    const template = artwork?.url;
+    if (!template) return '';
+    return template.replace('{w}', String(size)).replace('{h}', String(size)).replace('{f}', 'jpg');
+  }
+
+  function appleResourceToTrack(resource) {
+    const attributes = resource?.attributes || {};
+    const color = attributes.artwork?.bgColor ? `#${attributes.artwork.bgColor}` : '#fa2d48';
+    return registerTrack({
+      id: `apple-${resource.id}`,
+      appleId: resource.id,
+      platform: 'apple',
+      platformName: 'Apple Music',
+      trackName: attributes.name || '未知歌曲',
+      artistName: attributes.artistName || '未知歌手',
+      mood: attributes.albumName || attributes.genreNames?.[0] || 'Apple Music',
+      color,
+      artwork: appleArtworkUrl(attributes.artwork, 160),
+      url: attributes.url || `https://music.apple.com/cn/song/${resource.id}`
+    });
+  }
+
   async function searchAppleMusic(term, { silent = false } = {}) {
     const query = String(term || '').trim();
     if (!query) {
@@ -743,13 +960,15 @@
       const resources = readAppleResponseData(response, ['results', 'songs']);
       const appleTracks = resources.map(appleResourceToTrack);
       musicTracks = [...musicTracks.filter(track => track.platform !== 'apple'), ...appleTracks];
-      visibleMusicTracks = appleTracks;
-      currentMusicIndex = -1;
-      renderMusicResults();
-      setMusicStatus(appleTracks.length ? `Apple Music · 找到 ${appleTracks.length} 首歌曲。` : 'Apple Music 没有找到匹配歌曲。', !appleTracks.length);
+      if (activeMusicPlatform === 'apple') {
+        visibleMusicTracks = appleTracks;
+        currentMusicId = null;
+        renderMusicResults();
+        setMusicStatus(appleTracks.length ? `Apple Music · 找到 ${appleTracks.length} 首歌曲。` : 'Apple Music 没有找到匹配歌曲。', !appleTracks.length);
+      }
     } catch (error) {
       console.error('Apple Music search failed', error);
-      setMusicStatus('Apple Music 搜索失败，请稍后重试或检查开发者令牌。', true);
+      if (activeMusicPlatform === 'apple') setMusicStatus('Apple Music 搜索失败，请稍后重试或检查开发者令牌。', true);
     }
   }
 
@@ -764,10 +983,12 @@
       const resources = readAppleResponseData(response);
       const appleTracks = resources.filter(item => item.type === 'songs').map(appleResourceToTrack);
       musicTracks = [...musicTracks.filter(track => track.platform !== 'apple'), ...appleTracks];
-      visibleMusicTracks = appleTracks;
-      currentMusicIndex = -1;
-      renderMusicResults();
-      setMusicStatus(appleTracks.length ? `已载入 ${appleTracks.length} 首最近播放。` : '最近播放记录为空。');
+      if (activeMusicPlatform === 'apple') {
+        visibleMusicTracks = appleTracks;
+        currentMusicId = null;
+        renderMusicResults();
+        setMusicStatus(appleTracks.length ? `已载入 ${appleTracks.length} 首最近播放。` : '最近播放记录为空。');
+      }
     } catch (error) {
       console.error('Apple Music history failed', error);
       setMusicStatus('暂时无法读取最近播放，请重新授权后再试。', true);
@@ -796,8 +1017,10 @@
       $('#appleMusicAccountTitle').textContent = '需要完成 Apple 开发者配置';
       $('#appleMusicAccountDetail').textContent = '播放器界面已接入；配置安全令牌后即可授权、搜索和播放。';
       $('#appleMusicConnectButton').disabled = true;
-      setMusicStatus('Apple Music 播放器已安装，等待配置官方开发者密钥。');
-      renderMusicResults();
+      if (activeMusicPlatform === 'apple') {
+        setMusicStatus('Apple Music 播放器已安装，等待配置官方开发者密钥。');
+        renderMusicResults();
+      }
     }
   }
 
@@ -830,44 +1053,99 @@
 
   function switchMusicPlatform(platform) {
     activeMusicPlatform = platform;
-    currentMusicIndex = -1;
+    currentMusicId = null;
     resetMusicEmbed();
-    showApplePlaybackControls(platform === 'apple' && Boolean(appleMusic?.nowPlayingItem));
-    $('#musicOpenButton').className = 'button music-open-button hidden';
-    $('#appleMusicAccount').classList.toggle('hidden', platform !== 'apple');
+    const isApple = platform === 'apple';
+    $('#appleMusicPanel').classList.toggle('hidden', !isApple);
+    $('#metingPlayerWrap').classList.toggle('hidden', isApple || !metingOnline);
+    $('#musicNowPlaying').classList.toggle('hidden', !isApple && metingOnline);
+    showApplePlaybackControls(isApple && Boolean(appleMusic?.nowPlayingItem));
+    updateMusicOpenButton(null);
     const notice = $('#musicProviderNotice');
-    notice.classList.toggle('hidden', platform === 'apple');
-    if (platform === 'apple') {
-      notice.innerHTML = '';
+    if (isApple) {
+      if (aplayer) aplayer.pause();
+      notice.classList.add('hidden');
       $('#musicSearchInput').placeholder = '在 Apple Music 搜索歌曲或歌手';
       $('#musicShowAllButton').textContent = '华语精选';
       visibleMusicTracks = musicTracks.filter(track => track.platform === 'apple');
       renderMusicResults();
       setMusicStatus(appleMusicReady ? '输入歌曲或歌手，直接搜索 Apple Music 官方曲库。' : 'Apple Music 播放器等待开发者令牌配置。');
-    } else if (platform === 'netease') {
-      notice.innerHTML = '<strong>网易云官方外链尝试：</strong>精选歌曲会直接载入 music.163.com 的官方外链播放器；它不提供账号登录、全曲库搜索或会员权益接入，部分歌曲可能因版权限制不可播放。';
-      $('#musicSearchInput').placeholder = '筛选网易云精选歌曲';
-      $('#musicShowAllButton').textContent = '返回精选';
-      filterMusic('');
-    } else {
-      notice.innerHTML = '<strong>QQ 音乐官方接入状态：</strong>普通网页暂无公开的完整播放 SDK。完整能力主要面向腾讯连连等合作场景；当前只保留官方歌曲页，不接入非官方扫码登录。';
-      $('#musicSearchInput').placeholder = '筛选 QQ 音乐精选歌曲';
-      $('#musicShowAllButton').textContent = '返回精选';
-      filterMusic('');
+      return;
+    }
+    const conf = METING_PLATFORMS[platform];
+    notice.classList.remove('hidden');
+    $('#musicSearchInput').placeholder = `在${conf.label}搜索歌曲或歌手`;
+    if (platform === 'netease') {
+      $('#musicShowAllButton').textContent = '返回我的歌单';
+      if (metingOnline) {
+        notice.innerHTML = `<strong>网易云音乐 · 聚合播放：</strong>默认展示你的歌单「${esc(playlistName())}」，也可以直接搜索网易云全曲库在线播放。播放地址由 Meting 公共接口解析，少数歌曲可能因版权限制无法播放。`;
+        visibleMusicTracks = quickPickTracks;
+        renderMusicResults();
+        if (playlistTracks.length) {
+          setMusicStatus(`「${playlistName()}」 · ${playlistTracks.length} 首已就绪，播放器下方可展开完整歌单。`);
+        } else {
+          setMusicStatus(`正在载入「${playlistName()}」…`);
+          loadNeteasePlaylist();
+        }
+      } else {
+        notice.innerHTML = '<strong>离线模式：</strong>聚合接口暂时不可用，正在展示歌单快照；点击歌曲将使用网易云官方外链播放器播放。';
+        filterMusic('');
+      }
+      return;
+    }
+    $('#musicShowAllButton').textContent = '清空搜索';
+    notice.innerHTML = `<strong>${conf.label} · 聚合播放：</strong>可搜索${conf.label}曲库并在线播放。${conf.label}部分歌曲受版权限制，遇到不可播放时会自动切换网易云同名音源代播，并保留「在${conf.label}打开」入口。`;
+    visibleMusicTracks = [];
+    renderMusicResults();
+    setMusicStatus(`输入歌手或歌名，搜索${conf.label}曲库；也可以点“随机选一首”。`);
+  }
+
+  async function handleMusicRandom() {
+    if (activeMusicPlatform === 'apple') {
+      const candidates = visibleMusicTracks.length ? visibleMusicTracks : musicTracks.filter(track => track.platform === 'apple');
+      if (!candidates.length) { setMusicStatus('请先搜索一首 Apple Music 歌曲。', true); return; }
+      playAppleTrack(candidates[Math.floor(Math.random() * candidates.length)]);
+      return;
+    }
+    if (activeMusicPlatform === 'netease') {
+      if (!metingOnline) {
+        const pool = musicTracks.filter(track => track.platform === 'netease' && track.offline);
+        if (!pool.length) { setMusicStatus('当前没有可选择的歌曲。', true); return; }
+        selectExternalMusic(pool[Math.floor(Math.random() * pool.length)]);
+        return;
+      }
+      if (!playlistTracks.length) await loadNeteasePlaylist({ silent: true });
+      if (!playlistTracks.length) { setMusicStatus('歌单还没有载入完成，稍后再试。', true); return; }
+      playMetingTrack(playlistTracks[Math.floor(Math.random() * playlistTracks.length)]);
+      return;
+    }
+    const conf = METING_PLATFORMS[activeMusicPlatform];
+    const word = RANDOM_SEARCH_WORDS[Math.floor(Math.random() * RANDOM_SEARCH_WORDS.length)];
+    setMusicStatus(`随机灵感“${word}”，正在${conf.label}找歌…`);
+    try {
+      const data = await metingFetch({ server: conf.server, type: 'search', id: word });
+      const tracks = (Array.isArray(data) ? data : []).map(item => metingTrackFromApi(item, activeMusicPlatform)).filter(track => track.url);
+      if (!tracks.length) { setMusicStatus('这次没有找到可播放的歌曲，再点一次试试。', true); return; }
+      visibleMusicTracks = tracks;
+      renderMusicResults();
+      playMetingTrack(tracks[Math.floor(Math.random() * Math.min(5, tracks.length))]);
+    } catch (error) {
+      console.warn('Meting random search failed', error);
+      setMusicStatus(`${conf.label}接口暂时繁忙，稍后再试。`, true);
     }
   }
 
   function initMusic() {
-    musicTracks = createMusicCatalog();
-    visibleMusicTracks = [];
     renderMusicResults();
     $('#musicSearchForm').addEventListener('submit', event => {
       event.preventDefault();
-      if (activeMusicPlatform === 'apple') searchAppleMusic($('#musicSearchInput').value);
-      else filterMusic();
+      const term = $('#musicSearchInput').value;
+      if (activeMusicPlatform === 'apple') searchAppleMusic(term);
+      else if (activeMusicPlatform === 'netease' && !metingOnline) filterMusic(term);
+      else searchMetingMusic(activeMusicPlatform, term);
     });
     $('#musicSearchInput').addEventListener('input', event => {
-      if (activeMusicPlatform !== 'apple') filterMusic(event.currentTarget.value);
+      if (activeMusicPlatform === 'netease' && !metingOnline) filterMusic(event.currentTarget.value);
     });
     $('#musicPlatformTabs').addEventListener('click', event => {
       const button = event.target.closest('[data-music-platform]');
@@ -881,27 +1159,34 @@
       switchMusicPlatform(button.dataset.musicPlatform);
     });
     $('#musicResults').addEventListener('click', event => {
-      const button = event.target.closest('[data-music-index]');
+      const button = event.target.closest('[data-music-id]');
       if (!button) return;
-      const index = Number(button.dataset.musicIndex);
-      if (musicTracks[index]?.platform === 'apple') playAppleTrack(index);
-      else selectExternalMusic(index);
+      const track = trackStore.get(button.dataset.musicId);
+      if (!track) return;
+      if (track.platform === 'apple') playAppleTrack(track);
+      else if (track.offline) selectExternalMusic(track);
+      else playMetingTrack(track);
     });
-    $('#musicRandomButton').addEventListener('click', () => {
-      const candidates = visibleMusicTracks.length ? visibleMusicTracks : musicTracks.filter(track => track.platform === activeMusicPlatform);
-      if (!candidates.length) {
-        setMusicStatus(activeMusicPlatform === 'apple' ? '请先搜索一首 Apple Music 歌曲。' : '当前没有可选择的歌曲。', true);
-        return;
-      }
-      const track = candidates[Math.floor(Math.random() * candidates.length)];
-      const index = musicTracks.findIndex(item => item.id === track.id);
-      if (track.platform === 'apple') playAppleTrack(index);
-      else selectExternalMusic(index);
-    });
+    $('#musicRandomButton').addEventListener('click', handleMusicRandom);
     $('#musicShowAllButton').addEventListener('click', () => {
       $('#musicSearchInput').value = '';
-      if (activeMusicPlatform === 'apple') searchAppleMusic('华语流行');
-      else filterMusic('');
+      if (activeMusicPlatform === 'apple') { searchAppleMusic('华语流行'); return; }
+      if (activeMusicPlatform === 'netease') {
+        if (metingOnline) {
+          visibleMusicTracks = quickPickTracks;
+          renderMusicResults();
+          if (playlistTracks.length) {
+            setMusicStatus(`「${playlistName()}」 · ${playlistTracks.length} 首已就绪，播放器下方可展开完整歌单。`);
+          } else {
+            setMusicStatus(`正在载入「${playlistName()}」…`);
+            loadNeteasePlaylist();
+          }
+        } else filterMusic('');
+        return;
+      }
+      visibleMusicTracks = [];
+      renderMusicResults();
+      setMusicStatus(`输入歌手或歌名，搜索${METING_PLATFORMS[activeMusicPlatform].label}曲库。`);
     });
     $('#appleMusicConnectButton').addEventListener('click', authorizeAppleMusic);
     $('#appleMusicLogoutButton').addEventListener('click', unauthorizeAppleMusic);
@@ -923,8 +1208,9 @@
     $('#applePlaybackSeek').addEventListener('change', async event => {
       if (!appleMusic) return;
       const duration = Number(appleMusic.currentPlaybackDuration) || 0;
-      try { await appleMusic.seekToTime(duration * Number(event.currentTarget.value) / 1000); } catch { /* Ignore unavailable seeking. */ }
+      try { await appleMusic.seekToTime(duration * Number(event.currentTarget.value) / 1000); } catch { /* 忽略拖动失败 */ }
     });
+    switchMusicPlatform('netease');
     if (window.MusicKit) configureAppleMusic();
     else document.addEventListener('musickitloaded', configureAppleMusic, { once: true });
   }

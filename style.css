@@ -397,3 +397,36 @@ input[type="range"] { height: auto; padding: 0; accent-color: var(--accent); bor
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+
+/* ---- 聚合音乐播放器（APlayer）深色主题适配 ---- */
+/* 注意：APlayer 会把 .aplayer 类直接加到容器元素本身，所以根选择器是 #dashboardAPlayer */
+.platform-dot.kugou { background: #4aa3ff; box-shadow: 0 0 0 3px rgba(74,163,255,.12); }
+.meting-player-wrap { margin-top: 4px; }
+#dashboardAPlayer.aplayer { margin: 0; color: var(--text); background: rgba(9,14,20,.78); border: 1px solid var(--border); border-radius: 14px; box-shadow: none; font-family: inherit; }
+#dashboardAPlayer .aplayer-pic { border-radius: 13px 0 0 0; }
+#dashboardAPlayer .aplayer-pic .aplayer-button path,
+#dashboardAPlayer .aplayer-pic .aplayer-play path,
+#dashboardAPlayer .aplayer-pic .aplayer-pause path { fill: #fff; }
+#dashboardAPlayer.aplayer svg path { fill: #cbd5dd; }
+#dashboardAPlayer .aplayer-info { border-bottom: 1px solid rgba(255,255,255,.07); }
+#dashboardAPlayer .aplayer-info .aplayer-music .aplayer-title { color: var(--text); }
+#dashboardAPlayer .aplayer-info .aplayer-music .aplayer-author { color: var(--muted); }
+#dashboardAPlayer .aplayer-controller .aplayer-bar-wrap .aplayer-bar,
+#dashboardAPlayer .aplayer-controller .aplayer-bar-wrap .aplayer-bar .aplayer-loaded { background: rgba(255,255,255,.14); }
+#dashboardAPlayer .aplayer-time { color: var(--muted); }
+#dashboardAPlayer .aplayer-volume-bar-wrap .aplayer-volume-bar { background: rgba(255,255,255,.14); }
+#dashboardAPlayer .aplayer-list { border-radius: 0 0 13px 13px; }
+#dashboardAPlayer .aplayer-list ol { scrollbar-width: thin; }
+#dashboardAPlayer .aplayer-list ol li { border-top: 1px solid rgba(255,255,255,.05); color: var(--text); }
+#dashboardAPlayer .aplayer-list ol li:hover { background: rgba(102,214,167,.07); }
+#dashboardAPlayer .aplayer-list ol li.aplayer-list-light { background: rgba(102,214,167,.12); }
+#dashboardAPlayer .aplayer-list ol li .aplayer-list-title { color: var(--text); }
+#dashboardAPlayer .aplayer-list ol li .aplayer-list-author { color: var(--muted); }
+#dashboardAPlayer .aplayer-list ol li .aplayer-list-cur { background: #66d6a7; }
+#dashboardAPlayer .aplayer-lrc { text-shadow: none; }
+#dashboardAPlayer .aplayer-lrc::before,
+#dashboardAPlayer .aplayer-lrc::after { display: none; }
+#dashboardAPlayer .aplayer-lrc p { color: var(--muted); }
+#dashboardAPlayer .aplayer-lrc p.aplayer-lrc-current { color: #fff; }
+#dashboardAPlayer .aplayer-miniswitcher { background: #2b3441; }
